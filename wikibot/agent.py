@@ -103,7 +103,13 @@ def _dispatch(name: str, arguments: dict) -> str:
 
 
 def _to_input_item(item) -> dict:
-    data = item.model_dump(mode="json", by_alias=True, exclude_none=True)
+    # __api_exclude__: SDK-only fields (parsed_arguments) the API never sent.
+    data = item.model_dump(
+        mode="json",
+        by_alias=True,
+        exclude_none=True,
+        exclude=getattr(item, "__api_exclude__", None),
+    )
     if data.get("type") == "message":
         for part in data.get("content", []):
             if part.get("type") == "output_text":
@@ -138,7 +144,7 @@ def _digest(name: str, output: str) -> str:
 def stream_turn(
     client: OpenAI,
     model: str,
-    history: list,
+    history: list[dict],
     user_message: str,
 ) -> Iterator[tuple]:
     """Run one user message to completion, yielding events as they happen.
@@ -176,7 +182,9 @@ def stream_turn(
             break
 
         for call in calls:
-            arguments = json.loads(call.arguments)
+            # The stream helper already parsed strict-tool arguments (and raised
+            # on malformed JSON); None means the model named an unknown tool.
+            arguments = call.parsed_arguments or {}
             yield ("tool", call.name, arguments)
             output = _dispatch(call.name, arguments)
             history.append(
@@ -188,14 +196,17 @@ def stream_turn(
             )
             yield ("tool_result", call.name, _digest(call.name, output))
     else:
-        final_text = "Stopped: tool call limit reached (10 rounds) for this message."
+        final_text = (
+            "Stopped: tool call limit reached"
+            f" ({MAX_TOOL_ROUNDS} rounds) for this message."
+        )
     yield ("done", final_text)
 
 
 def run_turn(
     client: OpenAI,
     model: str,
-    history: list,
+    history: list[dict],
     user_message: str,
     on_tool=None,
 ) -> str:
