@@ -1,24 +1,13 @@
 """REPL entrypoint: uv run --env-file .env -m wikibot"""
 
-import os
-import sys
-
 from openai import OpenAI
 
 from . import agent
-
-
-def _require_env(name: str) -> str:
-    value = os.environ.get(name, "").strip()
-    if not value:
-        sys.exit(f"error: {name} is not set — fill it in .env (see README.md)")
-    return value
+from .config import load_config
 
 
 def main() -> None:
-    api_key = _require_env("OPENAI_API_KEY")
-    model = _require_env("OPENAI_MODEL")
-    base_url = os.environ.get("OPENAI_BASE_URL", "").strip() or None
+    api_key, model, base_url = load_config()
 
     client = OpenAI(api_key=api_key, base_url=base_url)
     history: list = []

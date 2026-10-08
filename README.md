@@ -32,13 +32,30 @@ bot> Alan Turing was an English mathematician ... [Alan Turing](https://en.wikip
 
 Commands: `exit` / `quit` to leave, `.reset` to clear conversation history.
 
+## Web UI
+
+```bash
+uv run --env-file .env python -m wikibot.webui
+```
+
+Opens a Gradio chat app on http://localhost:7860 with:
+
+- **streaming answers** (live tokens, Stop button while generating)
+- **tool steps** — collapsible `🔧 search_wikipedia(...)` bubbles with
+  pending → done status, before each answer
+- citations as clickable links; **Clear** resets the conversation
+
+Same backend as the CLI — `wikibot/agent.py` + `wikibot/wiki.py` are shared.
+
 ## Layout
 
 | File | Purpose |
 |------|---------|
 | `wikibot/wiki.py` | Wikipedia adapter (search, summary, content) over `wikipediaapi` |
-| `wikibot/agent.py` | Tool schemas + Responses API agent loop |
+| `wikibot/agent.py` | Tool schemas + Responses API agent loop (`stream_turn` events) |
 | `wikibot/cli.py` | REPL |
+| `wikibot/webui.py` | Gradio web UI |
+| `wikibot/config.py` | Shared `.env` loading for both entrypoints |
 
 Wikipedia access is free and keyless (MediaWiki Action API); only the OpenAI
 key is required. Set a contact address in the User-Agent if you run this at

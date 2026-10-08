@@ -1,6 +1,7 @@
 """OpenAI Responses API agent loop with Wikipedia tools."""
 
 import json
+from collections.abc import Iterator
 
 from openai import OpenAI
 
@@ -111,38 +112,48 @@ def _to_input_item(item) -> dict:
     return data
 
 
-def run_turn(
+def stream_turn(
     client: OpenAI,
     model: str,
     history: list,
     user_message: str,
-    on_tool=None,
-) -> str:
-    """Run one user message to completion, driving the tool loop.
+) -> Iterator[tuple]:
+    """Run one user message to completion, yielding events as they happen.
 
-    ``history`` is mutated in place: user message, output items, and
+    Events: ("tool", name, args) before each dispatch, ("delta", text) for
+    streamed answer tokens, ("done", full_text) exactly once at the end.
+    Raises on API errors; tool failures are data, never raised.
+
+    History is mutated in place: user message, output items, and
     function_call/function_call_output pairs are appended together so the
-    pairs are never split.
+    pairs are never split. Raise points occur only at API-call boundaries,
+    so a call can never be left without its output.
     """
     history.append({"role": "user", "content": user_message})
+    final_text = ""
     for _ in range(MAX_TOOL_ROUNDS):
-        response = client.responses.create(
+        with client.responses.stream(
             model=model,
             instructions=SYSTEM_PROMPT,
             input=history,
             tools=TOOLS,
-        )
+        ) as stream:
+            for event in stream:
+                if event.type == "response.output_text.delta":
+                    yield ("delta", event.delta)
+            response = stream.get_final_response()
+
         output_items = list(response.output)
         history.extend(_to_input_item(item) for item in output_items)
 
         calls = [item for item in output_items if item.type == "function_call"]
         if not calls:
-            return response.output_text
+            final_text = response.output_text
+            break
 
         for call in calls:
             arguments = json.loads(call.arguments)
-            if on_tool:
-                on_tool(f"{call.name}({json.dumps(arguments, ensure_ascii=False)})")
+            yield ("tool", call.name, arguments)
             history.append(
                 {
                     "type": "function_call_output",
@@ -150,4 +161,23 @@ def run_turn(
                     "output": _dispatch(call.name, arguments),
                 }
             )
-    return "Stopped: tool call limit reached (10 rounds) for this message."
+    else:
+        final_text = "Stopped: tool call limit reached (10 rounds) for this message."
+    yield ("done", final_text)
+
+
+def run_turn(
+    client: OpenAI,
+    model: str,
+    history: list,
+    user_message: str,
+    on_tool=None,
+) -> str:
+    """Blocking wrapper over stream_turn for the CLI: ignores deltas."""
+    final_text = ""
+    for event in stream_turn(client, model, history, user_message):
+        if event[0] == "tool" and on_tool:
+            on_tool(f"{event[1]}({json.dumps(event[2], ensure_ascii=False)})")
+        elif event[0] == "done":
+            final_text = event[1]
+    return final_text
