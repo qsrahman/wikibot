@@ -139,6 +139,53 @@ TOOLS = [
             "additionalProperties": False,
         },
     },
+    {
+        "type": "function",
+        "name": "get_page_links",
+        "description": (
+            "List the articles one page links to, as exact titles you can "
+            "fetch with get_page_summary. Use to find related articles, for "
+            "\"what does this page cover\", or when the user asks what a "
+            "topic is connected to."
+        ),
+        "strict": True,
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "title": {
+                    "type": "string",
+                    "description": "Exact article title as returned by search_wikipedia.",
+                },
+                "limit": {
+                    "type": "integer",
+                    "description": "Maximum number of links to return, 1-20. Use 10 unless asked otherwise.",
+                },
+            },
+            "required": ["title", "limit"],
+            "additionalProperties": False,
+        },
+    },
+    {
+        "type": "function",
+        "name": "get_random_pages",
+        "description": (
+            "Fetch random English Wikipedia articles with their introductory "
+            "summaries. Use when the user wants a surprise, something new to "
+            "read, or \"tell me something interesting\"."
+        ),
+        "strict": True,
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "limit": {
+                    "type": "integer",
+                    "description": "Number of random articles, 1-5. Use 3 unless asked otherwise.",
+                },
+            },
+            "required": ["limit"],
+            "additionalProperties": False,
+        },
+    },
 ]
 
 
@@ -152,6 +199,10 @@ def _dispatch(name: str, arguments: dict) -> str:
             result = wiki.page_content(arguments["title"])
         elif name == "get_page_section":
             result = wiki.page_section(arguments["title"], arguments["section"])
+        elif name == "get_page_links":
+            result = wiki.page_links(arguments["title"], arguments["limit"])
+        elif name == "get_random_pages":
+            result = wiki.random_pages(arguments["limit"])
         else:
             result = {"error": f"unknown tool: {name}"}
     except Exception as exc:
@@ -177,6 +228,8 @@ def _digest(name: str, output: str) -> str:
         return ""
     if "error" in data:
         return f"error: {str(data['error'])[:100]}"
+    if not data.get("found", True):
+        return "section not found" if "section" in data else "page not found"
     if name == "search_wikipedia":
         pages = data.get("pages", [])
         if not pages:
@@ -184,8 +237,15 @@ def _digest(name: str, output: str) -> str:
         titles = ", ".join(p["title"] for p in pages[:3])
         extra = f" (+{len(pages) - 3} more)" if len(pages) > 3 else ""
         return f"{len(pages)} results: {titles}{extra}"
-    if not data.get("found", True):
-        return "section not found" if "section" in data else "page not found"
+    if name == "get_page_links":
+        links = data.get("links", [])
+        titles = ", ".join(p["title"] for p in links[:3])
+        extra = f" (+{len(links) - 3} more)" if len(links) > 3 else ""
+        return f"{len(links)} links: {titles}{extra}"
+    if name == "get_random_pages":
+        pages = data.get("pages", [])
+        titles = ", ".join(p["title"] for p in pages[:3])
+        return f"{len(pages)} random pages: {titles}"
     label = "content" if "text" in data else "summary"
     chars = len(data.get("text") or data.get("summary") or "")
     note = ", truncated" if data.get("truncated") else ""

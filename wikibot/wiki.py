@@ -113,3 +113,25 @@ def page_section(title: str, section: str) -> dict:
         out["sections"] = subsections
         out["hint"] = "Text cut off. Call get_page_section for a subsection listed here."
     return out
+
+
+def page_links(title: str, limit: int = 10) -> dict:
+    page = _wiki.page(title)
+    if not page.exists():
+        return {"found": False, "title": title, "hint": "Wrong title? Call search_wikipedia."}
+    links = list(page.links.items())[:limit]
+    return {
+        "found": True,
+        "title": page.title,
+        "links": [{"title": t, "url": _page_url(t)} for t, _ in links],
+        "total": len(page.links),
+        "url": page.fullurl,
+    }
+
+
+def random_pages(limit: int = 3) -> dict:
+    pages = [
+        {"title": page.title, "summary": page.summary, "url": page.fullurl}
+        for page in _wiki.random(limit=limit).values()
+    ]
+    return {"pages": pages}
