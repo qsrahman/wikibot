@@ -41,7 +41,9 @@ def _outline(sections, depth: int = 1) -> list[dict]:
 
 
 def search_wikipedia(query: str, limit: int = 5) -> dict:
-    results = _wiki.search(query, limit=limit)
+    # enable_rewrites: a misspelled query returns the corrected query's
+    # results instead of zero hits, saving the model a retry round.
+    results = _wiki.search(query, limit=limit, enable_rewrites=True)
     pages = [
         {
             "title": title,
