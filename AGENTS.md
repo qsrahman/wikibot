@@ -27,11 +27,12 @@ webui.py ─┘
 ```
 
 Data flow per turn: user input → `stream_turn()` generator → Responses API
-stream → yields `("tool", name, args)` / `("delta", text)` / `("done", text)`
-events; tool calls dispatch to `wiki.py` and their `function_call_output` is
-appended to history before the next round. `run_turn` is a blocking wrapper
-over `stream_turn` used by the CLI (ignores deltas, calls `on_tool`); the web
-UI consumes events directly.
+stream → yields `("tool", name, args)` before dispatch, `("tool_result", name,
+digest)` after, then `("delta", text)` / `("done", text)` events; tool calls
+dispatch to `wiki.py` and their `function_call_output` is appended to history
+before the next round. `run_turn` is a blocking wrapper over `stream_turn`
+used by the CLI (ignores `tool_result`/deltas, calls `on_tool`); the web UI
+consumes events directly.
 
 ## Key files
 

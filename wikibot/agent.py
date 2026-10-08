@@ -112,6 +112,29 @@ def _to_input_item(item) -> dict:
     return data
 
 
+def _digest(name: str, output: str) -> str:
+    """One-line tool result summary for UIs; not sent to the model."""
+    try:
+        data = json.loads(output)
+    except ValueError:
+        return ""
+    if "error" in data:
+        return f"error: {str(data['error'])[:100]}"
+    if name == "search_wikipedia":
+        pages = data.get("pages", [])
+        if not pages:
+            return "no results"
+        titles = ", ".join(p["title"] for p in pages[:3])
+        extra = f" (+{len(pages) - 3} more)" if len(pages) > 3 else ""
+        return f"{len(pages)} results: {titles}{extra}"
+    if not data.get("found", True):
+        return "page not found"
+    label = "content" if "text" in data else "summary"
+    chars = len(data.get("text") or data.get("summary") or "")
+    note = ", truncated" if data.get("truncated") else ""
+    return f"{label}: {chars:,} chars{note}"
+
+
 def stream_turn(
     client: OpenAI,
     model: str,
@@ -120,9 +143,10 @@ def stream_turn(
 ) -> Iterator[tuple]:
     """Run one user message to completion, yielding events as they happen.
 
-    Events: ("tool", name, args) before each dispatch, ("delta", text) for
-    streamed answer tokens, ("done", full_text) exactly once at the end.
-    Raises on API errors; tool failures are data, never raised.
+    Events: ("tool", name, args) before each dispatch, ("tool_result",
+    name, digest) after it, ("delta", text) for streamed answer tokens,
+    ("done", full_text) exactly once at the end. Raises on API errors;
+    tool failures are data, never raised.
 
     History is mutated in place: user message, output items, and
     function_call/function_call_output pairs are appended together so the
@@ -154,13 +178,15 @@ def stream_turn(
         for call in calls:
             arguments = json.loads(call.arguments)
             yield ("tool", call.name, arguments)
+            output = _dispatch(call.name, arguments)
             history.append(
                 {
                     "type": "function_call_output",
                     "call_id": call.call_id,
-                    "output": _dispatch(call.name, arguments),
+                    "output": output,
                 }
             )
+            yield ("tool_result", call.name, _digest(call.name, output))
     else:
         final_text = "Stopped: tool call limit reached (10 rounds) for this message."
     yield ("done", final_text)
