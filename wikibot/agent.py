@@ -7,18 +7,46 @@ from openai import OpenAI
 
 from . import wiki
 
-MAX_TOOL_ROUNDS = 10
+MAX_TOOL_ROUNDS = 15
 
 SYSTEM_PROMPT = """\
-You are wikibot, a chatbot that answers questions using English Wikipedia.
+You are wikibot, an assistant that answers questions from English Wikipedia.
+People use you because every fact you give can be traced to an article, so
+you look things up instead of recalling them.
 
-Rules:
-- Answer from the Wikipedia tool results, not from memory. Search first when
-  you are not sure of the exact article title.
-- Cite factual claims with the source article as [Title](URL), using the URL
-  the tools returned.
-- If Wikipedia has nothing relevant, say so plainly instead of guessing.
-- Answer in the language the user writes in. Keep answers concise.
+Grounding
+- Every factual question starts with a tool call. Take facts from text the
+  tools returned in this conversation, never from memory, and that includes
+  what you believe about dates and recent or future events. Earlier results
+  still count for follow-up questions; look up whatever they do not cover.
+- Search snippets are fragments for choosing an article. State a fact from
+  one only when the snippet says it outright; otherwise read the article.
+- When a result is truncated and the answer is not in the part you received,
+  fetch the relevant section rather than answering from partial text.
+- If the search finds nothing relevant, or a tool returns an error you
+  cannot work around, say so plainly instead of filling the gap.
+- Report figures the way the article does, including ranges, disputes and
+  "as of" dates.
+
+Ambiguous terms
+- A page that only lists meanings of a term ("X may refer to ...") is a
+  disambiguation page, not an answer. If the conversation makes the intended
+  meaning clear, search for that article and answer from it. Otherwise name
+  the main options in plain text and ask which one the user means.
+
+Citations
+- Cite the article a fact came from as [Title](URL), copying the URL exactly
+  as a tool returned it. Never write a URL from memory or build one from a
+  title: mention such a page by name without a link, or search for it first.
+- One citation per article per paragraph or list is enough; do not repeat the
+  same link after every sentence.
+
+Style
+- Reply in the user's language. The tools only search English Wikipedia, so
+  write search queries in English and leave article titles untranslated.
+- Lead with the answer and keep it to a few sentences unless the user asks
+  for depth. Use a list only when the content is a list, and bold sparingly.
+- Only greetings and questions about yourself are answered without tools.
 """
 
 TOOLS = [
@@ -132,13 +160,7 @@ def _dispatch(name: str, arguments: dict) -> str:
 
 
 def _to_input_item(item) -> dict:
-    # __api_exclude__: SDK-only fields (parsed_arguments) the API never sent.
-    data = item.model_dump(
-        mode="json",
-        by_alias=True,
-        exclude_none=True,
-        exclude=getattr(item, "__api_exclude__", None),
-    )
+    data = item.model_dump(mode="json", by_alias=True, exclude_none=True)
     if data.get("type") == "message":
         for part in data.get("content", []):
             if part.get("type") == "output_text":
@@ -170,7 +192,7 @@ def _digest(name: str, output: str) -> str:
     return f"{label}: {chars:,} chars{note}"
 
 
-def stream_turn(
+def run_turn(
     client: OpenAI,
     model: str,
     history: list[dict],
@@ -191,16 +213,22 @@ def stream_turn(
     history.append({"role": "user", "content": user_message})
     final_text = ""
     for _ in range(MAX_TOOL_ROUNDS):
-        with client.responses.stream(
+        response = None
+        with client.responses.create(
             model=model,
             instructions=SYSTEM_PROMPT,
             input=history,
             tools=TOOLS,
+            stream=True,
+            store=False,
         ) as stream:
             for event in stream:
                 if event.type == "response.output_text.delta":
                     yield ("delta", event.delta)
-            response = stream.get_final_response()
+                elif event.type == "response.completed":
+                    response = event.response
+        if response is None:
+            raise RuntimeError("response stream ended without completing")
 
         output_items = list(response.output)
         history.extend(_to_input_item(item) for item in output_items)
@@ -211,9 +239,12 @@ def stream_turn(
             break
 
         for call in calls:
-            # The stream helper already parsed strict-tool arguments (and raised
-            # on malformed JSON); None means the model named an unknown tool.
-            arguments = call.parsed_arguments or {}
+            # Must not raise here: the function_call is already in history and
+            # needs its output. Bad JSON becomes {} and _dispatch reports it.
+            try:
+                arguments = json.loads(call.arguments)
+            except ValueError:
+                arguments = {}
             yield ("tool", call.name, arguments)
             output = _dispatch(call.name, arguments)
             history.append(
@@ -231,19 +262,3 @@ def stream_turn(
         )
     yield ("done", final_text)
 
-
-def run_turn(
-    client: OpenAI,
-    model: str,
-    history: list[dict],
-    user_message: str,
-    on_tool=None,
-) -> str:
-    """Blocking wrapper over stream_turn for the CLI: ignores deltas."""
-    final_text = ""
-    for event in stream_turn(client, model, history, user_message):
-        if event[0] == "tool" and on_tool:
-            on_tool(f"{event[1]}({json.dumps(event[2], ensure_ascii=False)})")
-        elif event[0] == "done":
-            final_text = event[1]
-    return final_text

@@ -56,7 +56,7 @@ Same backend as the CLI — `wikibot/agent.py` + `wikibot/wiki.py` are shared.
 | File | Purpose |
 |------|---------|
 | `wikibot/wiki.py` | Wikipedia adapter (search, summary, content) over `wikipediaapi` |
-| `wikibot/agent.py` | Tool schemas + Responses API agent loop (`stream_turn` events) |
+| `wikibot/agent.py` | Tool schemas + Responses API agent loop (`run_turn` events) |
 | `wikibot/cli.py` | REPL |
 | `wikibot/webui.py` | Gradio web UI |
 | `wikibot/config.py` | Shared `.env` loading for both entrypoints |

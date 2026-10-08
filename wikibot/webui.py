@@ -201,7 +201,7 @@ def respond(user_msg: str, browser: dict):
             tool_index = None
 
     try:
-        for event in agent.stream_turn(_client, model, agent_hist, user_msg):
+        for event in agent.run_turn(_client, model, agent_hist, user_msg):
             kind = event[0]
             if kind == "delta":
                 if text_index is None:

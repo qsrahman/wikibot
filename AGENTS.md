@@ -23,23 +23,22 @@ Three modules, one direction of dependency; two entrypoints on top:
 cli.py   ─┐
           ├→  agent.py  →  wiki.py  →  wikipediaapi  →  en.wikipedia.org
 webui.py ─┘
-(REPL)        (stream_turn / run_turn)   (adapter)
+(REPL)        (run_turn)                 (adapter)
 ```
 
-Data flow per turn: user input → `stream_turn()` generator → Responses API
+Data flow per turn: user input → `run_turn()` generator → Responses API
 stream → yields `("tool", name, args)` before dispatch, `("tool_result", name,
 digest)` after, then `("delta", text)` / `("done", text)` events; tool calls
 dispatch to `wiki.py` and their `function_call_output` is appended to history
-before the next round. `run_turn` is a blocking wrapper over `stream_turn`
-used by the CLI (ignores `tool_result`/deltas, calls `on_tool`); the web UI
-consumes events directly.
+before the next round. Both entrypoints consume the events directly; the CLI
+prints tool lines and deltas as they arrive and ignores `tool_result`.
 
 ## Key files
 
 | File | Purpose |
 |------|---------|
 | `wikibot/wiki.py` | Only place that talks to `wikipediaapi` |
-| `wikibot/agent.py` | Tool schemas, dispatch, `stream_turn`/`run_turn`, system prompt |
+| `wikibot/agent.py` | Tool schemas, dispatch, `run_turn`, system prompt |
 | `wikibot/cli.py` | REPL |
 | `wikibot/webui.py` | Gradio app: display history + agent history in `gr.State` |
 | `wikibot/config.py` | `load_config()` — the only place `.env` is read |
@@ -62,7 +61,7 @@ consumes events directly.
 - **`function_call` and its `function_call_output` are appended to history
   together**, in order. Splitting a pair makes the API reject the request.
   History lives with the entrypoint: a mutable list in `cli.py`, a
-  `gr.State` in `webui.py`; `stream_turn`/`run_turn` mutate it in place.
+  `gr.State` in `webui.py`; `run_turn` mutates it in place.
 - **The web UI never touches `wikipediaapi` and never builds URLs.** It talks
   only to `agent.py`'s event stream and renders what comes back; citations
   stay tool-output-only, same as the CLI. Errors become an error bubble, not
@@ -92,7 +91,7 @@ consumes events directly.
   http://localhost:7860; one turn must show tool-step bubbles then a streamed
   cited answer; Clear must reset both histories.
 - Engine check without a browser:
-  `list(agent.stream_turn(...))` → event order `tool … → delta … → done`,
+  `list(agent.run_turn(...))` → event order `tool … → delta … → done`,
   every `function_call` paired with its `function_call_output`.
 - Live testing needs a filled `.env`; unit-style checks of `wiki.py` need no
   key: `uv run python -c "from wikibot import wiki; print(wiki.search_wikipedia('Alan Turing'))"`.

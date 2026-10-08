@@ -1,5 +1,7 @@
 """REPL entrypoint: uv run --env-file .env -m wikibot"""
 
+import json
+
 from openai import OpenAI
 
 from . import agent
@@ -17,7 +19,7 @@ def main() -> None:
 
     while True:
         try:
-            user = input("you> ").strip()
+            user = input("> ").strip()
         except (EOFError, KeyboardInterrupt):
             print()
             break
@@ -29,15 +31,25 @@ def main() -> None:
             history.clear()
             print("history cleared")
             continue
+        streamed = False
         try:
-            answer = agent.run_turn(
-                client,
-                model,
-                history,
-                user,
-                on_tool=lambda line: print(f"  -> {line}"),
-            )
+            for event in agent.run_turn(client, model, history, user):
+                if event[0] == "tool":
+                    if streamed:
+                        print()
+                        streamed = False
+                    print(f"  -> {event[1]}({json.dumps(event[2], ensure_ascii=False)})")
+                elif event[0] == "delta":
+                    if not streamed:
+                        print()
+                        streamed = True
+                    print(event[1], end="", flush=True)
+                elif event[0] == "done" and not streamed:
+                    # No deltas: e.g. the tool-round-limit message.
+                    print(f"\n{event[1]}", end="")
         except Exception as exc:
+            if streamed:
+                print()
             print(f"error: {type(exc).__name__}: {exc}")
             continue
-        print(f"bot> {answer}")
+        print("\n")
