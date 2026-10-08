@@ -51,8 +51,10 @@ consumes events directly.
   adapter's dict-returning functions. New Wikipedia capability = one function
   in `wiki.py` + one tool schema in `agent.py`.
 - **Shape output before the model sees it.** Strip HTML from search snippets,
-  JSON-encode tool results, truncate `page_content` at `MAX_CONTENT_CHARS`
-  **with the `truncated` flag set** — never trim silently.
+  JSON-encode tool results, truncate `page_content` / `page_section` at `MAX_CONTENT_CHARS`
+  **with the `truncated` flag set** — never trim silently. A truncated result
+  also carries a `sections` outline so the model can reach the rest through
+  `get_page_section`.
 - **Tool failures return strings, never raise.** `_dispatch` catches all
   exceptions and returns `{"error": ...}` as the tool output so the model can
   recover and the REPL turn never crashes. Same rule at the REPL boundary:

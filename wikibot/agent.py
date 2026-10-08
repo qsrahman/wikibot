@@ -69,7 +69,9 @@ TOOLS = [
         "name": "get_page_content",
         "description": (
             "Fetch the full plain-text content of a Wikipedia article by its "
-            "exact title. Long output; use only when the summary is not enough."
+            "exact title. Long output; use only when the summary is not enough. "
+            "Long articles are cut off: the result then has truncated=true and "
+            "a sections outline (name, depth, size) to use with get_page_section."
         ),
         "strict": True,
         "parameters": {
@@ -84,6 +86,31 @@ TOOLS = [
             "additionalProperties": False,
         },
     },
+    {
+        "type": "function",
+        "name": "get_page_section",
+        "description": (
+            "Fetch one section of a Wikipedia article, including its "
+            "subsections, by exact section name. Use to read parts of a long "
+            "article that get_page_content cut off."
+        ),
+        "strict": True,
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "title": {
+                    "type": "string",
+                    "description": "Exact article title as returned by search_wikipedia.",
+                },
+                "section": {
+                    "type": "string",
+                    "description": "Exact section name from a sections outline.",
+                },
+            },
+            "required": ["title", "section"],
+            "additionalProperties": False,
+        },
+    },
 ]
 
 
@@ -95,6 +122,8 @@ def _dispatch(name: str, arguments: dict) -> str:
             result = wiki.page_summary(arguments["title"])
         elif name == "get_page_content":
             result = wiki.page_content(arguments["title"])
+        elif name == "get_page_section":
+            result = wiki.page_section(arguments["title"], arguments["section"])
         else:
             result = {"error": f"unknown tool: {name}"}
     except Exception as exc:
@@ -134,7 +163,7 @@ def _digest(name: str, output: str) -> str:
         extra = f" (+{len(pages) - 3} more)" if len(pages) > 3 else ""
         return f"{len(pages)} results: {titles}{extra}"
     if not data.get("found", True):
-        return "page not found"
+        return "section not found" if "section" in data else "page not found"
     label = "content" if "text" in data else "summary"
     chars = len(data.get("text") or data.get("summary") or "")
     note = ", truncated" if data.get("truncated") else ""

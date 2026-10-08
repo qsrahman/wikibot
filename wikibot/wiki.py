@@ -27,6 +27,19 @@ def _page_url(title: str) -> str:
     return "https://en.wikipedia.org/wiki/" + quote(title.replace(" ", "_"))
 
 
+def _clip(text: str) -> tuple[str, bool]:
+    truncated = len(text) > MAX_CONTENT_CHARS
+    return (text[:MAX_CONTENT_CHARS] if truncated else text), truncated
+
+
+def _outline(sections, depth: int = 1) -> list[dict]:
+    out = []
+    for sec in sections:
+        out.append({"section": sec.title, "depth": depth, "chars": len(sec.full_text())})
+        out.extend(_outline(sec.sections, depth + 1))
+    return out
+
+
 def search_wikipedia(query: str, limit: int = 5) -> dict:
     results = _wiki.search(query, limit=limit)
     pages = [
@@ -56,14 +69,45 @@ def page_content(title: str) -> dict:
     page = _wiki.page(title)
     if not page.exists():
         return {"found": False, "title": title, "hint": "Wrong title? Call search_wikipedia."}
-    text = page.text
-    truncated = len(text) > MAX_CONTENT_CHARS
-    if truncated:
-        text = text[:MAX_CONTENT_CHARS]
-    return {
+    text, truncated = _clip(page.text)
+    out = {
         "found": True,
         "title": page.title,
         "text": text,
         "truncated": truncated,
         "url": page.fullurl,
     }
+    if truncated:
+        out["sections"] = _outline(page.sections)
+        out["hint"] = "Text cut off. Call get_page_section for a section listed here."
+    return out
+
+
+def page_section(title: str, section: str) -> dict:
+    page = _wiki.page(title)
+    if not page.exists():
+        return {"found": False, "title": title, "hint": "Wrong title? Call search_wikipedia."}
+    # A heading can repeat within one article; return every match.
+    matches = page.sections_by_title(section)
+    if not matches:
+        return {
+            "found": False,
+            "title": page.title,
+            "section": section,
+            "hint": "No such section. Use an exact name from sections.",
+            "sections": _outline(page.sections),
+        }
+    text, truncated = _clip("\n\n".join(m.full_text().strip() for m in matches))
+    out = {
+        "found": True,
+        "title": page.title,
+        "section": section,
+        "text": text,
+        "truncated": truncated,
+        "url": page.fullurl,
+    }
+    subsections = _outline(s for m in matches for s in m.sections)
+    if truncated and subsections:
+        out["sections"] = subsections
+        out["hint"] = "Text cut off. Call get_page_section for a subsection listed here."
+    return out
