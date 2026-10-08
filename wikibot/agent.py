@@ -5,7 +5,7 @@ from collections.abc import Iterator
 
 from openai import OpenAI
 
-from . import wiki
+from .wiki import WikipediaClient
 
 MAX_TOOL_ROUNDS = 15
 
@@ -189,136 +189,154 @@ TOOLS = [
 ]
 
 
-def _dispatch(name: str, arguments: dict) -> str:
-    try:
-        if name == "search_wikipedia":
-            result = wiki.search_wikipedia(arguments["query"], arguments["limit"])
-        elif name == "get_page_summary":
-            result = wiki.page_summary(arguments["title"])
-        elif name == "get_page_content":
-            result = wiki.page_content(arguments["title"])
-        elif name == "get_page_section":
-            result = wiki.page_section(arguments["title"], arguments["section"])
-        elif name == "get_page_links":
-            result = wiki.page_links(arguments["title"], arguments["limit"])
-        elif name == "get_random_pages":
-            result = wiki.random_pages(arguments["limit"])
-        else:
-            result = {"error": f"unknown tool: {name}"}
-    except Exception as exc:
-        result = {"error": f"{type(exc).__name__}: {exc}"}
-    return json.dumps(result, ensure_ascii=False)
+class Agent:
+    """Runs the Responses API loop and dispatches Wikipedia tool calls.
 
-
-def _to_input_item(item) -> dict:
-    data = item.model_dump(mode="json", by_alias=True, exclude_none=True)
-    if data.get("type") == "message":
-        for part in data.get("content", []):
-            if part.get("type") == "output_text":
-                part["type"] = "input_text"
-                part.pop("annotations", None)
-    return data
-
-
-def _digest(name: str, output: str) -> str:
-    """One-line tool result summary for UIs; not sent to the model."""
-    try:
-        data = json.loads(output)
-    except ValueError:
-        return ""
-    if "error" in data:
-        return f"error: {str(data['error'])[:100]}"
-    if not data.get("found", True):
-        return "section not found" if "section" in data else "page not found"
-    if name == "search_wikipedia":
-        pages = data.get("pages", [])
-        if not pages:
-            return "no results"
-        titles = ", ".join(p["title"] for p in pages[:3])
-        extra = f" (+{len(pages) - 3} more)" if len(pages) > 3 else ""
-        return f"{len(pages)} results: {titles}{extra}"
-    if name == "get_page_links":
-        links = data.get("links", [])
-        titles = ", ".join(p["title"] for p in links[:3])
-        extra = f" (+{len(links) - 3} more)" if len(links) > 3 else ""
-        return f"{len(links)} links: {titles}{extra}"
-    if name == "get_random_pages":
-        pages = data.get("pages", [])
-        titles = ", ".join(p["title"] for p in pages[:3])
-        return f"{len(pages)} random pages: {titles}"
-    label = "content" if "text" in data else "summary"
-    chars = len(data.get("text") or data.get("summary") or "")
-    note = ", truncated" if data.get("truncated") else ""
-    return f"{label}: {chars:,} chars{note}"
-
-
-def run_turn(
-    client: OpenAI,
-    model: str,
-    history: list[dict],
-    user_message: str,
-) -> Iterator[tuple]:
-    """Run one user message to completion, yielding events as they happen.
-
-    Events: ("tool", name, args) before each dispatch, ("tool_result",
-    name, digest) after it, ("delta", text) for streamed answer tokens,
-    ("done", full_text) exactly once at the end. Raises on API errors;
-    tool failures are data, never raised.
-
-    History is mutated in place: user message, output items, and
-    function_call/function_call_output pairs are appended together so the
-    pairs are never split. Raise points occur only at API-call boundaries,
-    so a call can never be left without its output.
+    Holds the OpenAI client, model name, and the Wikipedia adapter. One
+    instance per conversation session; ``run_turn`` mutates a caller-owned
+    ``history`` list in place and yields events.
     """
-    history.append({"role": "user", "content": user_message})
-    final_text = ""
-    for _ in range(MAX_TOOL_ROUNDS):
-        response = None
-        with client.responses.create(
-            model=model,
-            instructions=SYSTEM_PROMPT,
-            input=history,
-            tools=TOOLS,
-            stream=True,
-            store=False,
-        ) as stream:
-            for event in stream:
-                if event.type == "response.output_text.delta":
-                    yield ("delta", event.delta)
-                elif event.type == "response.completed":
-                    response = event.response
-        if response is None:
-            raise RuntimeError("response stream ended without completing")
 
-        output_items = list(response.output)
-        history.extend(_to_input_item(item) for item in output_items)
+    def __init__(
+        self,
+        client: OpenAI,
+        model: str,
+        wiki: WikipediaClient | None = None,
+        *,
+        max_tool_rounds: int = MAX_TOOL_ROUNDS,
+    ):
+        self.client = client
+        self.model = model
+        self.wiki = wiki if wiki is not None else WikipediaClient()
+        self.max_tool_rounds = max_tool_rounds
 
-        calls = [item for item in output_items if item.type == "function_call"]
-        if not calls:
-            final_text = response.output_text
-            break
+    def _dispatch(self, name: str, arguments: dict) -> str:
+        try:
+            if name == "search_wikipedia":
+                result = self.wiki.search_wikipedia(arguments["query"], arguments["limit"])
+            elif name == "get_page_summary":
+                result = self.wiki.page_summary(arguments["title"])
+            elif name == "get_page_content":
+                result = self.wiki.page_content(arguments["title"])
+            elif name == "get_page_section":
+                result = self.wiki.page_section(arguments["title"], arguments["section"])
+            elif name == "get_page_links":
+                result = self.wiki.page_links(arguments["title"], arguments["limit"])
+            elif name == "get_random_pages":
+                result = self.wiki.random_pages(arguments["limit"])
+            else:
+                result = {"error": f"unknown tool: {name}"}
+        except Exception as exc:
+            result = {"error": f"{type(exc).__name__}: {exc}"}
+        return json.dumps(result, ensure_ascii=False)
 
-        for call in calls:
-            # Must not raise here: the function_call is already in history and
-            # needs its output. Bad JSON becomes {} and _dispatch reports it.
-            try:
-                arguments = json.loads(call.arguments)
-            except ValueError:
-                arguments = {}
-            yield ("tool", call.name, arguments)
-            output = _dispatch(call.name, arguments)
-            history.append(
-                {
-                    "type": "function_call_output",
-                    "call_id": call.call_id,
-                    "output": output,
-                }
+    @staticmethod
+    def _to_input_item(item) -> dict:
+        data = item.model_dump(mode="json", by_alias=True, exclude_none=True)
+        if data.get("type") == "message":
+            for part in data.get("content", []):
+                if part.get("type") == "output_text":
+                    part["type"] = "input_text"
+                    part.pop("annotations", None)
+        return data
+
+    @staticmethod
+    def _digest(name: str, output: str) -> str:
+        """One-line tool result summary for UIs; not sent to the model."""
+        try:
+            data = json.loads(output)
+        except ValueError:
+            return ""
+        if "error" in data:
+            return f"error: {str(data['error'])[:100]}"
+        if not data.get("found", True):
+            return "section not found" if "section" in data else "page not found"
+        if name == "search_wikipedia":
+            pages = data.get("pages", [])
+            if not pages:
+                return "no results"
+            titles = ", ".join(p["title"] for p in pages[:3])
+            extra = f" (+{len(pages) - 3} more)" if len(pages) > 3 else ""
+            return f"{len(pages)} results: {titles}{extra}"
+        if name == "get_page_links":
+            links = data.get("links", [])
+            titles = ", ".join(p["title"] for p in links[:3])
+            extra = f" (+{len(links) - 3} more)" if len(links) > 3 else ""
+            return f"{len(links)} links: {titles}{extra}"
+        if name == "get_random_pages":
+            pages = data.get("pages", [])
+            titles = ", ".join(p["title"] for p in pages[:3])
+            return f"{len(pages)} random pages: {titles}"
+        label = "content" if "text" in data else "summary"
+        chars = len(data.get("text") or data.get("summary") or "")
+        note = ", truncated" if data.get("truncated") else ""
+        return f"{label}: {chars:,} chars{note}"
+
+    def run_turn(
+        self,
+        history: list[dict],
+        user_message: str,
+    ) -> Iterator[tuple]:
+        """Run one user message to completion, yielding events as they happen.
+
+        Events: ("tool", name, args) before each dispatch, ("tool_result",
+        name, digest) after it, ("delta", text) for streamed answer tokens,
+        ("done", full_text) exactly once at the end. Raises on API errors;
+        tool failures are data, never raised.
+
+        History is mutated in place: user message, output items, and
+        function_call/function_call_output pairs are appended together so the
+        pairs are never split. Raise points occur only at API-call boundaries,
+        so a call can never be left without its output.
+        """
+        history.append({"role": "user", "content": user_message})
+        final_text = ""
+        for _ in range(self.max_tool_rounds):
+            response = None
+            with self.client.responses.create(
+                model=self.model,
+                instructions=SYSTEM_PROMPT,
+                input=history,
+                tools=TOOLS,
+                stream=True,
+                store=False,
+            ) as stream:
+                for event in stream:
+                    if event.type == "response.output_text.delta":
+                        yield ("delta", event.delta)
+                    elif event.type == "response.completed":
+                        response = event.response
+            if response is None:
+                raise RuntimeError("response stream ended without completing")
+
+            output_items = list(response.output)
+            history.extend(self._to_input_item(item) for item in output_items)
+
+            calls = [item for item in output_items if item.type == "function_call"]
+            if not calls:
+                final_text = response.output_text
+                break
+
+            for call in calls:
+                # Must not raise here: the function_call is already in history and
+                # needs its output. Bad JSON becomes {} and _dispatch reports it.
+                try:
+                    arguments = json.loads(call.arguments)
+                except ValueError:
+                    arguments = {}
+                yield ("tool", call.name, arguments)
+                output = self._dispatch(call.name, arguments)
+                history.append(
+                    {
+                        "type": "function_call_output",
+                        "call_id": call.call_id,
+                        "output": output,
+                    }
+                )
+                yield ("tool_result", call.name, self._digest(call.name, output))
+        else:
+            final_text = (
+                "Stopped: tool call limit reached"
+                f" ({self.max_tool_rounds} rounds) for this message."
             )
-            yield ("tool_result", call.name, _digest(call.name, output))
-    else:
-        final_text = (
-            "Stopped: tool call limit reached"
-            f" ({MAX_TOOL_ROUNDS} rounds) for this message."
-        )
-    yield ("done", final_text)
-
+        yield ("done", final_text)

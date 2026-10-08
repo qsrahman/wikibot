@@ -37,18 +37,22 @@ prints tool lines and deltas as they arrive and ignores `tool_result`.
 
 | File | Purpose |
 |------|---------|
-| `wikibot/wiki.py` | Only place that talks to `wikipediaapi` |
-| `wikibot/agent.py` | Tool schemas, dispatch, `run_turn`, system prompt |
-| `wikibot/cli.py` | REPL |
-| `wikibot/webui.py` | Gradio app: display history + agent history in `gr.State` |
-| `wikibot/config.py` | `load_config()` — the only place `.env` is read |
+| `wikibot/wiki.py` | `WikipediaClient` — the only place that talks to `wikipediaapi` |
+| `wikibot/agent.py` | `Agent`, tool schemas, dispatch, `run_turn`, system prompt |
+| `wikibot/cli.py` | `Repl` |
+| `wikibot/webui.py` | `WikiBotApp` — Gradio app: display history + agent history in `gr.State` |
+| `wikibot/config.py` | `Config` — the only place `.env` is read |
 | `wikibot/__main__.py` | `python -m wikibot` entry |
+
+Classes hold a session's moving parts: `WikipediaClient` wraps the wikipedia
+connection, `Agent(client, model)` wraps the OpenAI client, `Repl` and
+`WikiBotApp` each own one conversation history.
 
 ## Conventions
 
 - **Never call `wikipediaapi` outside `wiki.py`.** `agent.py` sees only the
-  adapter's dict-returning functions. New Wikipedia capability = one function
-  in `wiki.py` + one tool schema in `agent.py`.
+  adapter's dict-returning methods. New Wikipedia capability = one method on
+  `WikipediaClient` + one tool schema in `agent.py`.
 - **Shape output before the model sees it.** Strip HTML from search snippets,
   JSON-encode tool results, truncate `page_content` / `page_section` at `MAX_CONTENT_CHARS`
   **with the `truncated` flag set** — never trim silently. A truncated result
@@ -60,8 +64,8 @@ prints tool lines and deltas as they arrive and ignores `tool_result`.
   `cli.py` catches, prints, keeps the session alive.
 - **`function_call` and its `function_call_output` are appended to history
   together**, in order. Splitting a pair makes the API reject the request.
-  History lives with the entrypoint: a mutable list in `cli.py`, a
-  `gr.State` in `webui.py`; `run_turn` mutates it in place.
+  History lives with the entrypoint: a mutable list in `Repl`, a
+  `BrowserState` dict in `WikiBotApp`; `run_turn` mutates it in place.
 - **The web UI never touches `wikipediaapi` and never builds URLs.** It talks
   only to `agent.py`'s event stream and renders what comes back; citations
   stay tool-output-only, same as the CLI. Errors become an error bubble, not
@@ -77,7 +81,8 @@ prints tool lines and deltas as they arrive and ignores `tool_result`.
 
 ## Adding a tool
 
-1. Function in `wiki.py` returning a plain dict (no HTML, no exceptions).
+1. Method on `WikipediaClient` in `wiki.py` returning a plain dict (no HTML,
+   no exceptions).
 2. Schema in `agent.py` `TOOLS` (strict mode shape).
 3. One branch in `agent.py` `_dispatch`.
 4. Live-test the call path before committing.
@@ -91,8 +96,9 @@ prints tool lines and deltas as they arrive and ignores `tool_result`.
   http://localhost:7860; one turn must show tool-step bubbles then a streamed
   cited answer; Clear must reset both histories.
 - Engine check without a browser:
-  `list(agent.run_turn(...))` → event order `tool … → delta … → done`,
-  every `function_call` paired with its `function_call_output`.
+  `list(Agent(OpenAI(api_key=cfg.api_key, base_url=cfg.base_url), cfg.model).run_turn([], "msg"))`
+  → event order `tool … → delta … → done`, every `function_call` paired with
+  its `function_call_output`.
 - Live testing needs a filled `.env`; unit-style checks of `wiki.py` need no
-  key: `uv run python -c "from wikibot import wiki; print(wiki.search_wikipedia('Alan Turing'))"`.
+  key: `uv run python -c "from wikibot.wiki import WikipediaClient; print(WikipediaClient().search_wikipedia('Alan Turing'))"`.
 - Wikipedia API is keyless; OpenAI errors are the only auth failures to expect.

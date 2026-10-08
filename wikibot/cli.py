@@ -6,8 +6,8 @@ import sys
 
 from openai import OpenAI
 
-from . import agent
-from .config import load_config
+from .agent import Agent
+from .config import Config
 
 _STYLES = {"dim": "\x1b[2m", "amber": "\x1b[33m", "red": "\x1b[31m", "reset": "\x1b[0m"}
 _USE_COLOR = sys.stdout.isatty() and "NO_COLOR" not in os.environ
@@ -19,33 +19,18 @@ def _style(text: str, kind: str) -> str:
     return f"{_STYLES[kind]}{text}{_STYLES['reset']}"
 
 
-def main() -> None:
-    api_key, model, base_url = load_config()
+class Repl:
+    """Prompt loop owning one conversation history for one Agent."""
 
-    client = OpenAI(api_key=api_key, base_url=base_url)
-    history: list = []
+    def __init__(self, agent: Agent):
+        self.agent = agent
+        self.history: list[dict] = []
 
-    print("wikibot — answers from English Wikipedia.")
-    print("commands: exit | quit | .reset (clear history)")
-
-    while True:
-        try:
-            user = input("> ").strip()
-        except (EOFError, KeyboardInterrupt):
-            print()
-            break
-        if not user:
-            continue
-        if user.lower() in {"exit", "quit"}:
-            break
-        if user == ".reset":
-            history.clear()
-            print(_style("history cleared", "amber"))
-            continue
+    def _handle(self, user: str) -> None:
         streamed = False
-        history_len = len(history)
+        history_len = len(self.history)
         try:
-            for event in agent.run_turn(client, model, history, user):
+            for event in self.agent.run_turn(self.history, user):
                 if event[0] == "tool":
                     if streamed:
                         print()
@@ -63,12 +48,38 @@ def main() -> None:
         except KeyboardInterrupt:
             if streamed:
                 print()
-            del history[history_len:]
+            del self.history[history_len:]
             print(_style("aborted — history rolled back to last complete turn", "amber"))
-            continue
+            return
         except Exception as exc:
             if streamed:
                 print()
             print(_style(f"error: {type(exc).__name__}: {exc}", "red"))
-            continue
+            return
         print("\n")
+
+    def run(self) -> None:
+        print("wikibot — answers from English Wikipedia.")
+        print("commands: exit | quit | .reset (clear history)")
+
+        while True:
+            try:
+                user = input("> ").strip()
+            except (EOFError, KeyboardInterrupt):
+                print()
+                return
+            if not user:
+                continue
+            if user.lower() in {"exit", "quit"}:
+                return
+            if user == ".reset":
+                self.history.clear()
+                print(_style("history cleared", "amber"))
+                continue
+            self._handle(user)
+
+
+def main() -> None:
+    cfg = Config.from_env()
+    client = OpenAI(api_key=cfg.api_key, base_url=cfg.base_url)
+    Repl(Agent(client, cfg.model)).run()
