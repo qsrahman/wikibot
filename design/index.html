@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>wikibot — UI directions</title>
+<style>
+  :root { --ink: #20262c; --dim: #6a747d; --rule: #e6e2d8; --paper: #faf9f5; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--paper); color: var(--ink);
+    font-family: "Helvetica Neue", Helvetica, Arial, sans-serif; line-height: 1.6;
+    padding: 7vh 24px; -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 980px; margin: 0 auto; }
+  h1 { font-size: 26px; letter-spacing: -0.02em; margin: 0 0 6px; }
+  p.lede { color: var(--dim); margin: 0 0 40px; font-size: 15px; max-width: 640px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(430px, 1fr)); gap: 22px; }
+  .card {
+    border: 1px solid var(--rule); border-radius: 16px; background: #fff;
+    overflow: hidden; text-decoration: none; color: inherit; display: block;
+    transition: transform .12s ease, box-shadow .12s ease;
+  }
+  .card:hover { transform: translateY(-2px); box-shadow: 0 16px 30px -20px rgba(30,50,70,.35); }
+  .thumb { height: 190px; border-bottom: 1px solid var(--rule); position: relative; }
+  .thumb iframe { width: 200%; height: 380px; border: 0; transform: scale(0.5); transform-origin: 0 0; pointer-events: none; }
+  .body { padding: 14px 18px 16px; }
+  .body h2 { margin: 0 0 4px; font-size: 17px; }
+  .body .tag { font-size: 12px; color: var(--dim); margin-bottom: 8px; font-family: ui-monospace, Menlo, monospace; }
+  .body p { margin: 0; font-size: 13.5px; color: var(--dim); }
+  .note { margin-top: 36px; font-size: 12.5px; color: var(--dim); border-top: 1px solid var(--rule); padding-top: 16px; }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>wikibot — four UI directions</h1>
+    <p class="lede">Static mockups of the same conversation, styled four ways. Click a card to open the full-page mockup in a new tab.</p>
+
+    <div class="grid">
+      <a class="card" href="01-reading-room.html" target="_blank">
+        <div class="thumb"><iframe src="01-reading-room.html"></iframe></div>
+        <div class="body">
+          <h2>Reading Room</h2>
+          <div class="tag">serif · paper · wikipedia blue</div>
+          <p>Answers set like encyclopedia entries, with index-card tool steps and a Sources colophon. Quiet, slower, bookish.</p>
+        </div>
+      </a>
+
+      <a class="card" href="02-telescope.html" target="_blank">
+        <div class="thumb"><iframe src="02-telescope.html"></iframe></div>
+        <div class="body">
+          <h2>Telescope</h2>
+          <div class="tag">dark console · observatory log</div>
+          <p>Sessions rail plus a traced tool log beside the answer; the agent's work is an instrument reading, not an abstraction.</p>
+        </div>
+      </a>
+
+      <a class="card" href="03-inkwell.html" target="_blank">
+        <div class="thumb"><iframe src="03-inkwell.html"></iframe></div>
+        <div class="body">
+          <h2>Inkwell</h2>
+          <div class="tag">minimal · superscript footnotes</div>
+          <p>ChatGPT-shape but no bubbles — a paper's reference apparatus: superscript [1][2] resolved by an expandable References list.</p>
+        </div>
+      </a>
+
+      <a class="card" href="04-atlas.html" target="_blank">
+        <div class="thumb"><iframe src="04-atlas.html"></iframe></div>
+        <div class="body">
+          <h2>Atlas</h2>
+          <div class="tag">two-pane · live bibliography index</div>
+          <p>Conversation left, a card index of cited articles fills in as the agent works. The sources become a first-class surface.</p>
+        </div>
+      </a>
+    </div>
+
+    <div class="note">Prototypes only — nothing in the app changes until you pick a direction.</div>
+  </div>
+</body>
+</html>

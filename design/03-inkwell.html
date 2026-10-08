@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Inkwell — wikibot design mockup</title>
+<style>
+  :root {
+    --sheet: #ffffff;
+    --smoke: #f4f4f2;
+    --ink: #16181d;
+    --ink-dim: #6b7078;
+    --rule: #e9e9e5;
+    --accent: #3b63d6;
+    --accent-soft: #e8edfb;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body {
+    background: var(--sheet); color: var(--ink);
+    font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    font-size: 15px; line-height: 1.62;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .page { max-width: 620px; margin: 0 auto; padding: 7vh 28px 12vh; }
+
+  header {
+    display: flex; align-items: baseline; justify-content: space-between;
+    margin-bottom: 8vh;
+  }
+  header .wordmark { font-size: 17px; font-weight: 650; letter-spacing: -0.01em; }
+  header .wordmark i { font-style: normal; color: var(--accent); }
+  header .meta { font-size: 13px; color: var(--ink-dim); }
+
+  /* message spine */
+  .msg { display: grid; grid-template-columns: 44px 1fr; gap: 14px; margin: 26px 0; }
+  .msg .who { font-size: 12.5px; color: var(--ink-dim); text-align: right; padding-top: 3px; }
+  .msg.user .who { color: var(--accent); font-weight: 600; }
+
+  .msg .body p { margin: 0 0 0.9em; }
+  .msg .body a { color: var(--accent); text-decoration: none; border-bottom: 1px dotted var(--accent); }
+  .msg .body a:hover { border-bottom-style: solid; }
+
+  /* superscript citations */
+  sup.ref { font-size: 11px; font-weight: 650; color: var(--accent); margin: 0 1px; }
+  sup.ref a { border-bottom: none !important; color: inherit !important; }
+  sup.ref a:hover { text-decoration: underline; }
+
+  /* tool knockback — one quiet line, expands */
+  .toolnote {
+    grid-column: 2;
+    margin: 4px 0 0;
+    font-size: 13px; color: var(--ink-dim);
+    background: var(--smoke); border-radius: 8px; padding: 7px 12px;
+  }
+  .toolnote b { font-weight: 600; color: var(--ink); }
+
+  /* references list */
+  .refs { margin: 34px 0 0; }
+  .refs summary {
+    cursor: pointer; list-style: none; font-size: 13px; color: var(--ink-dim);
+    user-select: none;
+  }
+  .refs summary::after { content: "▾"; margin-left: 8px; font-size: 10px; }
+  .refs[open] summary::after { content: "▴"; }
+  .refs ol { margin: 12px 0 0; padding-left: 1.6em; font-size: 13.5px; color: var(--ink-dim); }
+  .refs a { color: var(--accent); text-decoration: none; }
+  .refs a:hover { text-decoration: underline; }
+
+  .composer {
+    position: sticky; bottom: 0; margin-top: 6vh;
+    background: linear-gradient(transparent, var(--sheet) 60%);
+    padding-top: 18px;
+  }
+  .composer .row { display: flex; gap: 8px; }
+  .composer input {
+    flex: 1; border: 1px solid var(--rule); border-radius: 10px;
+    background: var(--sheet); padding: 11px 16px; font: inherit; font-size: 14.5px;
+    box-shadow: 0 1px 2px rgba(20,24,40,0.04);
+  }
+  .composer input:focus { outline: none; border-color: var(--accent); }
+  .composer button {
+    border: none; border-radius: 10px; background: var(--accent); color: #fff;
+    font: inherit; font-size: 14px; font-weight: 600; padding: 0 20px; cursor: pointer;
+  }
+  .composer button:hover { filter: brightness(1.08); }
+  .composer .rule { text-align: center; font-size: 12px; color: #c0c3ca; margin-top: 10px; }
+  .composer .rule::before, .composer .rule::after { content: ""; display: inline-block; width: 40px; height: 1px; background: var(--rule); vertical-align: middle; margin: 0 10px; }
+</style>
+</head>
+<body>
+  <div class="page">
+    <header>
+      <div class="wordmark">wiki<i>bot</i></div>
+      <div class="meta">answers from English Wikipedia</div>
+    </header>
+
+    <div class="msg user">
+      <div class="who">you</div>
+      <div class="body"><p>Who discovered penicillin?</p></div>
+    </div>
+
+    <div class="msg assistant">
+      <div class="who">wiki</div>
+      <div class="body">
+        <div class="toolnote"><b>search_wikipedia</b> · 5 results: Penicillin, Alexander Fleming, Discovery of penicillin (+2)</div>
+        <div class="toolnote"><b>get_page_summary</b> · summary, 1,081 chars</div>
+        <p style="margin-top:10px">Penicillin was discovered in September 1928, when Alexander Fleming<sup class="ref"><a href="https://en.wikipedia.org/wiki/Alexander_Fleming">1</a></sup> found a stray mould on a culture plate had destroyed the surrounding staphylococci. He named the substance penicillin, but turning it into a medicine fell to Howard Florey and Ernst Chain at Oxford<sup class="ref"><a href="https://en.wikipedia.org/wiki/Penicillin">2</a></sup>; the three shared the 1945 Nobel Prize in Physiology or Medicine.</p>
+      </div>
+    </div>
+
+    <details class="refs">
+      <summary>References</summary>
+      <ol>
+        <li><a href="https://en.wikipedia.org/wiki/Alexander_Fleming">Alexander Fleming — Wikipedia</a></li>
+        <li><a href="https://en.wikipedia.org/wiki/Penicillin">Penicillin — Wikipedia</a></li>
+      </ol>
+    </details>
+
+    <div class="composer">
+      <div class="row">
+        <input type="text" placeholder="Ask anything about…">
+        <button>Ask</button>
+      </div>
+      <div class="rule">wikibot · model gemma4:cloud</div>
+    </div>
+  </div>
+</body>
+</html>
