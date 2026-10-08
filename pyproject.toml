@@ -1,0 +1,9 @@
+[project]
+name = "wikibot"
+version = "0.1.0"
+requires-python = ">=3.14"
+dependencies = [
+    "httpx>=0.28.1",
+    "openai>=3.26.1",
+    "wikipedia-api>=0.16.0",
+]
