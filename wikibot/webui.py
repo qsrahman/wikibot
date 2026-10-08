@@ -1,5 +1,10 @@
-"""Gradio web UI: uv run --env-file .env python -m wikibot.webui"""
+"""Gradio web UI: uv run --env-file .env python -m wikibot.webui
 
+Telescope layout: a dark instrument console with a sessions rail and traced
+tool-call log lines.
+"""
+
+import html
 import json
 
 import gradio as gr
@@ -18,17 +23,117 @@ from .config import load_config
 api_key, model, base_url = load_config()
 _client = OpenAI(api_key=api_key, base_url=base_url)
 
-EXAMPLES = [
-    "Who was Alan Turing?",
-    "How does photosynthesis work?",
-    "What caused the fall of the Roman Empire?",
-    "Explain how a Turing machine works",
-]
+BG = "#0c1119"
+PANEL = "#101620"
+RAIL = "#151d28"
+RULE = "#223043"
+INK = "#cdd6e0"
+DIM = "#77889c"
+AMBER = "#e2a552"
+AMBER_DIM = "#b98a4a"
+
+_THEME = gr.themes.Base(
+    primary_hue="amber",
+    neutral_hue="zinc",
+    radius_size=gr.themes.sizes.radius_sm,
+).set(
+    body_background_fill=BG,
+    body_text_color=INK,
+    block_background_fill=PANEL,
+    block_border_color=RULE,
+    background_fill_primary=PANEL,
+    background_fill_secondary=RAIL,
+    panel_background_fill=RAIL,
+    panel_border_color=RULE,
+    border_color_primary=RULE,
+    border_color_accent=AMBER_DIM,
+    color_accent=AMBER,
+    color_accent_soft="#2b2921",
+    input_background_fill=RAIL,
+    input_border_color=RULE,
+    input_border_color_focus=AMBER_DIM,
+    code_background_fill=BG,
+    link_text_color=AMBER,
+    link_text_color_hover=AMBER,
+    button_primary_background_fill=AMBER,
+    button_primary_text_color=BG,
+    button_secondary_background_fill=RAIL,
+    button_secondary_border_color=RULE,
+    button_secondary_text_color=INK,
+    error_background_fill="#241d1d",
+    error_border_color="#6e4a4a",
+    error_text_color="#f0b8b8",
+)
 
 CSS = """
-#chat-col { max-width: 860px; margin: 0 auto; }
-#wikibot-head h1 { margin: 0.2em 0 0.1em; }
-#wikibot-head p { margin: 0 0 0.8em; }
+html, body, .gradio-container { background: var(--tg-bg, #0c1119) !important; }
+
+/* instrument bar */
+#topbar { padding: 14px 26px; background: #0c1119; border-bottom: 1px solid #223043; }
+#topbar .brand { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 15px; font-weight: 700; color: #e2a552; }
+#topbar .brand em { font-style: normal; color: #cdd6e0; }
+#topbar .meta { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 12px; color: #77889c; }
+
+/* sessions rail */
+#shell { gap: 0; border-top: 1px solid #223043; }
+#rail { background: #151d28; border-right: 1px solid #223043; padding: 20px 14px; }
+#rail .rail-label { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 11px; letter-spacing: 0.09em; color: #77889c; text-transform: uppercase; margin: 0 6px 8px; }
+#rail .item { padding: 7px 10px; border-radius: 6px; color: #77889c; font-size: 13.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: default; }
+#rail .item + .item { margin-top: 2px; }
+#rail .item.active { background: #1d2a3d; color: #cdd6e0; }
+#rail .rail-empty { color: #55606e; font-size: 12.5px; margin: 4px 6px; line-height: 1.6; }
+#rail-clear { margin-top: auto; }
+
+/* conversation column */
+#convo { background: #101620; overflow: hidden; }
+#convo .message-row { background: transparent; border: none; box-shadow: none; }
+
+/* role labels */
+#convo .user-row .md::before {
+  content: "you ▸";
+  display: block;
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 12px;
+  color: #77889c;
+  margin-bottom: 3px;
+}
+#convo .bot-row .md:not(.thought-group .md)::before {
+  content: "wikibot ▸";
+  display: block;
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 12px;
+  color: #e2a552;
+  margin: 14px 0 3px;
+}
+
+/* tool-call log lines */
+#convo .thought-group { margin: 2px 0 0; }
+#convo .thought-group .title {
+  display: flex; align-items: center; gap: 6px;
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 12.5px;
+  background: #151d28;
+  border-radius: 6px;
+  padding: 5px 10px;
+}
+#convo .thought-group .title[aria-busy="true"] .md { color: #e2a552; }
+#convo .thought-group .title .md, #convo .thought-group .title .md p { margin: 0; color: #cdd6e0; }
+#convo .thought-group .arrow { color: #55606e; }
+
+/* answer prose */
+#convo .bot-row .md:not(.thought-group .md) p { font-size: 15px; line-height: 1.7; color: #cdd6e0; }
+#convo .bot-row .md:not(.thought-group .md) a { color: #e2a552; text-decoration: underline; text-decoration-color: #6a5c3f; }
+#convo .bot-row .md:not(.thought-group .md) a:hover { color: #f0b56a; }
+#convo .bot-row .md:not(.thought-group .md) code { background: #151d28; color: #d8c08a; border-radius: 4px; padding: 1px 5px; }
+
+/* composer */
+#compose { padding: 18px 26px 22px; background: #0c1119; border-top: 1px solid #223043; }
+#compose textarea { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 14px; }
+#compose textarea::placeholder { color: #55606e; }
+#compose button { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 12px; font-weight: 700; letter-spacing: 0.04em; }
+
+/* one clear affordance: the Chatbot's built-in Clear only resets visible chat */
+#chatbot button[aria-label="Clear"] { display: none; }
 """
 
 
@@ -38,7 +143,7 @@ def _box(value="", interactive=True, autofocus=False):
         interactive=interactive,
         autofocus=autofocus,
         lines=1,
-        placeholder="Ask anything about…",
+        placeholder="ask anything about…",
         show_label=False,
         container=False,
     )
@@ -59,8 +164,20 @@ def _friendly_error(exc: Exception) -> tuple[str, str]:
     return name, detail
 
 
+def _sessions_html(display: list[dict]) -> str:
+    """The question rail: one row per user turn, last one active."""
+    turns = [m["content"] for m in display if m.get("role") == "user"]
+    if not turns:
+        return '<div class="rail-label">Sessions</div><div class="rail-empty">No questions yet —<br>ask anything about…</div>'
+    items = []
+    for i, turn in enumerate(turns):
+        active = " active" if i == len(turns) - 1 else ""
+        items.append(f'<div class="item{active}">{html.escape(turn)}</div>')
+    return '<div class="rail-label">Sessions</div>' + "".join(items)
+
+
 def respond(user_msg: str, browser: dict):
-    """Chat generator: echo the user message, then stream tool steps + answer.
+    """Chat generator: echo the user message, then stream tool log + answer.
 
     ``browser`` is a BrowserState dict {"display", "agent"} persisted to
     localStorage; it is mutated in place and yielded back each step.
@@ -68,11 +185,11 @@ def respond(user_msg: str, browser: dict):
     display, agent_hist = browser["display"], browser["agent"]
 
     if not user_msg.strip():
-        yield display, _box(autofocus=True), browser
+        yield display, _box(autofocus=True), browser, _sessions_html(display)
         return
 
     display.append({"role": "user", "content": user_msg})
-    yield display, _box(interactive=False), browser
+    yield display, _box(interactive=False), browser, _sessions_html(display)
 
     text_index: int | None = None
     tool_index: int | None = None
@@ -99,7 +216,7 @@ def respond(user_msg: str, browser: dict):
                     {
                         "role": "assistant",
                         "content": f"`{json.dumps(args, ensure_ascii=False)}`",
-                        "metadata": {"title": f"🔧 {name}", "status": "pending"},
+                        "metadata": {"title": f"⇢ {name}", "status": "pending"},
                     }
                 )
                 tool_index = len(display) - 1
@@ -107,12 +224,10 @@ def respond(user_msg: str, browser: dict):
                 _, name, digest = event
                 if tool_index is not None:
                     if digest:
-                        # Title is what the collapsed thought-group shows; the
-                        # digest must live there or it is hidden behind a click.
-                        display[tool_index]["content"] += f"\n\n→ {digest}"
-                        display[tool_index]["metadata"]["title"] = (
-                            f"🔧 {name} · {digest}"
-                        )
+                        display[tool_index]["content"] += f"\n\n{digest}"
+                        display[tool_index]["metadata"]["title"] = f"✔ {digest}"
+                    else:
+                        display[tool_index]["metadata"]["title"] = f"✔ {name}"
                     display[tool_index]["metadata"]["status"] = "done"
                     tool_index = None
             elif kind == "done":
@@ -122,59 +237,63 @@ def respond(user_msg: str, browser: dict):
                     display[text_index]["content"] = full_text
                 elif full_text:
                     display.append({"role": "assistant", "content": full_text})
-            yield display, _box(interactive=False), browser
+            yield display, _box(interactive=False), browser, _sessions_html(display)
     except Exception as exc:
         close_step()
         title, detail = _friendly_error(exc)
         display.append({"role": "assistant", "content": f"**{title}**\n\n`{detail}`"})
-    yield display, _box(interactive=True, autofocus=True), browser
+    yield display, _box(interactive=True, autofocus=True), browser, _sessions_html(display)
 
 
 def clear(browser: dict):
-    return [], _box(autofocus=True), {"display": [], "agent": []}
+    return [], _box(autofocus=True), {"display": [], "agent": []}, _sessions_html([])
 
 
 def _hydrate(browser: dict):
-    return browser["display"]
+    return browser["display"], _sessions_html(browser["display"])
 
 
-with gr.Blocks(title="wikibot — Wikipedia chat") as demo:
+with gr.Blocks(title="wikibot — Wikipedia console") as demo:
     browser = gr.BrowserState(
         default_value={"display": [], "agent": []},
         storage_key="wikibot",
         secret="wikibot-local-only",
     )
-    with gr.Column(elem_id="chat-col"):
-        with gr.Column(elem_id="wikibot-head"):
-            gr.Markdown("# wikibot")
-            gr.Markdown(f"Answers from English Wikipedia · model `{model}`")
-        chatbot = gr.Chatbot(
-            label="Conversation",
-            height=560,
-            buttons=["copy", "copy_all"],
-            elem_id="chatbot",
-        )
-        msg = gr.Textbox(
-            lines=1,
-            placeholder="Ask anything about…",
-            show_label=False,
-            container=False,
-            autofocus=True,
-        )
-        gr.Examples(
-            examples=[[q] for q in EXAMPLES],
-            inputs=[msg],
-            label=None,
-        )
-        with gr.Row():
-            clear_btn = gr.Button("Clear", scale=0)
+    gr.Markdown(
+        f'<span class="brand">wiki<em>bot</em></span> '
+        f'<span class="meta">answers from English Wikipedia, model {model}</span>',
+        elem_id="topbar",
+    )
+    with gr.Row(elem_id="shell"):
+        with gr.Column(scale=1, min_width=200, elem_id="rail"):
+            rail = gr.HTML(_sessions_html([]))
+            clear_btn = gr.Button("clear conversation", elem_id="rail-clear", scale=0)
+        with gr.Column(scale=5, elem_id="convo"):
+            chatbot = gr.Chatbot(
+                show_label=False,
+                height=540,
+                layout="panel",
+                buttons=["copy"],
+                elem_id="chatbot",
+            )
+            with gr.Row(elem_id="compose"):
+                msg = gr.Textbox(
+                    lines=1,
+                    placeholder="ask anything about…",
+                    show_label=False,
+                    container=False,
+                    autofocus=True,
+                    scale=5,
+                )
+                run_btn = gr.Button("RUN", scale=0)
 
-    demo.load(_hydrate, inputs=[browser], outputs=[chatbot])
-    msg.submit(respond, [msg, browser], [chatbot, msg, browser])
-    clear_btn.click(clear, [browser], [chatbot, msg, browser])
+    demo.load(_hydrate, inputs=[browser], outputs=[chatbot, rail])
+    submit = msg.submit(respond, [msg, browser], [chatbot, msg, browser, rail])
+    run_btn.click(respond, [msg, browser], [chatbot, msg, browser, rail])
+    clear_btn.click(clear, [browser], [chatbot, msg, browser, rail])
 
 demo.queue()
 
 
 if __name__ == "__main__":
-    demo.launch(css=CSS)
+    demo.launch(theme=_THEME, css=CSS)
