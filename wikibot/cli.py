@@ -90,8 +90,9 @@ class Repl:
             printer.finish()
             del self.history[history_len:]
             print(_amber("aborted — history rolled back to last complete turn"))
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001
             printer.finish()
+            del self.history[history_len:]
             print(_red(f"error: {type(exc).__name__}: {exc}"))
 
     def run(self) -> None:
@@ -101,7 +102,7 @@ class Repl:
         while True:
             try:
                 user = input("> ").strip()
-            except (EOFError, KeyboardInterrupt):
+            except EOFError, KeyboardInterrupt:
                 print()
                 return
             if not user:

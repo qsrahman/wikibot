@@ -33,9 +33,19 @@ def _clip(text: str) -> tuple[str, bool]:
 def _outline(sections, depth: int = 1) -> list[dict]:
     out = []
     for sec in sections:
-        out.append({"section": sec.title, "depth": depth, "chars": len(sec.full_text())})
+        out.append(
+            {"section": sec.title, "depth": depth, "chars": len(sec.full_text())}
+        )
         out.extend(_outline(sec.sections, depth + 1))
     return out
+
+
+def _missing_page(title: str) -> dict:
+    return {
+        "found": False,
+        "title": title,
+        "hint": "Wrong title? Call search_wikipedia.",
+    }
 
 
 class WikipediaClient:
@@ -49,7 +59,9 @@ class WikipediaClient:
         pages = [
             {
                 "title": title,
-                "snippet": _strip_html(page.search_meta.snippet) if page.search_meta else "",
+                "snippet": _strip_html(page.search_meta.snippet)
+                if page.search_meta
+                else "",
                 "url": _page_url(title),
             }
             for title, page in results.pages.items()
@@ -64,13 +76,18 @@ class WikipediaClient:
     def page_summary(self, title: str) -> dict:
         page = self._wiki.page(title)
         if not page.exists():
-            return {"found": False, "title": title, "hint": "Wrong title? Call search_wikipedia."}
-        return {"found": True, "title": page.title, "summary": page.summary, "url": page.fullurl}
+            return _missing_page(title)
+        return {
+            "found": True,
+            "title": page.title,
+            "summary": page.summary,
+            "url": page.fullurl,
+        }
 
     def page_content(self, title: str) -> dict:
         page = self._wiki.page(title)
         if not page.exists():
-            return {"found": False, "title": title, "hint": "Wrong title? Call search_wikipedia."}
+            return _missing_page(title)
         text, truncated = _clip(page.text)
         out = {
             "found": True,
@@ -81,13 +98,15 @@ class WikipediaClient:
         }
         if truncated:
             out["sections"] = _outline(page.sections)
-            out["hint"] = "Text cut off. Call get_page_section for a section listed here."
+            out["hint"] = (
+                "Text cut off. Call get_page_section for a section listed here."
+            )
         return out
 
     def page_section(self, title: str, section: str) -> dict:
         page = self._wiki.page(title)
         if not page.exists():
-            return {"found": False, "title": title, "hint": "Wrong title? Call search_wikipedia."}
+            return _missing_page(title)
         # A heading can repeat within one article; return every match.
         matches = page.sections_by_title(section)
         if not matches:
@@ -110,13 +129,15 @@ class WikipediaClient:
         subsections = _outline(s for m in matches for s in m.sections)
         if truncated and subsections:
             out["sections"] = subsections
-            out["hint"] = "Text cut off. Call get_page_section for a subsection listed here."
+            out["hint"] = (
+                "Text cut off. Call get_page_section for a subsection listed here."
+            )
         return out
 
     def page_links(self, title: str, limit: int = 10) -> dict:
         page = self._wiki.page(title)
         if not page.exists():
-            return {"found": False, "title": title, "hint": "Wrong title? Call search_wikipedia."}
+            return _missing_page(title)
         links = list(page.links.items())[:limit]
         return {
             "found": True,

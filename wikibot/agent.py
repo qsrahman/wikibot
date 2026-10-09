@@ -14,7 +14,7 @@ You are wikibot, an assistant that answers questions from English Wikipedia.
 People use you because every fact you give can be traced to an article, so
 you look things up instead of recalling them.
 
-Grounding
+##Grounding
 - Every factual question starts with a tool call. Take facts from text the
   tools returned in this conversation, never from memory, and that includes
   what you believe about dates and recent or future events. Earlier results
@@ -28,20 +28,20 @@ Grounding
 - Report figures the way the article does, including ranges, disputes and
   "as of" dates.
 
-Ambiguous terms
+##Ambiguous terms
 - A page that only lists meanings of a term ("X may refer to ...") is a
   disambiguation page, not an answer. If the conversation makes the intended
   meaning clear, search for that article and answer from it. Otherwise name
   the main options in plain text and ask which one the user means.
 
-Citations
+##Citations
 - Cite the article a fact came from as [Title](URL), copying the URL exactly
   as a tool returned it. Never write a URL from memory or build one from a
   title: mention such a page by name without a link, or search for it first.
 - One citation per article per paragraph or list is enough; do not repeat the
   same link after every sentence.
 
-Style
+##Style
 - Reply in the user's language. The tools only search English Wikipedia, so
   write search queries in English and leave article titles untranslated.
 - Lead with the answer and keep it to a few sentences unless the user asks
@@ -145,7 +145,7 @@ TOOLS = [
         "description": (
             "List the articles one page links to, as exact titles you can "
             "fetch with get_page_summary. Use to find related articles, for "
-            "\"what does this page cover\", or when the user asks what a "
+            '"what does this page cover", or when the user asks what a '
             "topic is connected to."
         ),
         "strict": True,
@@ -171,7 +171,7 @@ TOOLS = [
         "description": (
             "Fetch random English Wikipedia articles with their introductory "
             "summaries. Use when the user wants a surprise, something new to "
-            "read, or \"tell me something interesting\"."
+            'read, or "tell me something interesting".'
         ),
         "strict": True,
         "parameters": {
@@ -228,7 +228,7 @@ class Agent:
             return json.dumps({"error": f"unknown tool: {name}"}, ensure_ascii=False)
         try:
             result = getattr(self.wiki, method)(*(arguments[arg] for arg in arg_names))
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001
             result = {"error": f"{type(exc).__name__}: {exc}"}
         return json.dumps(result, ensure_ascii=False)
 
@@ -253,22 +253,19 @@ class Agent:
             return f"error: {str(data['error'])[:100]}"
         if not data.get("found", True):
             return "section not found" if "section" in data else "page not found"
-        if name == "search_wikipedia":
-            pages = data.get("pages", [])
-            if not pages:
+        list_results = {
+            "search_wikipedia": ("pages", "results", True),
+            "get_page_links": ("links", "links", True),
+            "get_random_pages": ("pages", "random pages", False),
+        }
+        if name in list_results:
+            key, label, show_more = list_results[name]
+            items = data.get(key, [])
+            if name == "search_wikipedia" and not items:
                 return "no results"
-            titles = ", ".join(p["title"] for p in pages[:3])
-            extra = f" (+{len(pages) - 3} more)" if len(pages) > 3 else ""
-            return f"{len(pages)} results: {titles}{extra}"
-        if name == "get_page_links":
-            links = data.get("links", [])
-            titles = ", ".join(p["title"] for p in links[:3])
-            extra = f" (+{len(links) - 3} more)" if len(links) > 3 else ""
-            return f"{len(links)} links: {titles}{extra}"
-        if name == "get_random_pages":
-            pages = data.get("pages", [])
-            titles = ", ".join(p["title"] for p in pages[:3])
-            return f"{len(pages)} random pages: {titles}"
+            titles = ", ".join(item["title"] for item in items[:3])
+            extra = f" (+{len(items) - 3} more)" if show_more and len(items) > 3 else ""
+            return f"{len(items)} {label}: {titles}{extra}"
         label = "content" if "text" in data else "summary"
         chars = len(data.get("text") or data.get("summary") or "")
         note = ", truncated" if data.get("truncated") else ""

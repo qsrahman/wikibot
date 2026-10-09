@@ -160,13 +160,19 @@ class WikiBotApp:
     def _friendly_error(self, exc: Exception) -> tuple[str, str]:
         name, detail = type(exc).__name__, str(exc)
         if isinstance(exc, APIConnectionError):
-            return "Can't reach the model gateway", "Is it running? Check OPENAI_BASE_URL in .env."
+            return (
+                "Can't reach the model gateway",
+                "Is it running? Check OPENAI_BASE_URL in .env.",
+            )
         if isinstance(exc, RateLimitError):
             return "Rate limited by the gateway", "Wait a moment and try again."
         if isinstance(exc, AuthenticationError):
             return "Authentication failed", "Check OPENAI_API_KEY in .env."
         if isinstance(exc, NotFoundError):
-            return "Model or endpoint not found", f"Check OPENAI_MODEL (got: {self.model})."
+            return (
+                "Model or endpoint not found",
+                f"Check OPENAI_MODEL (got: {self.model}).",
+            )
         if isinstance(exc, APIStatusError):
             return f"Gateway error (HTTP {exc.status_code})", detail
         return name, detail
@@ -186,7 +192,9 @@ class WikiBotApp:
     @staticmethod
     def _title(chat: dict) -> str:
         """A chat is listed under its first question."""
-        return next((m["content"] for m in chat["display"] if m["role"] == "user"), "New chat")
+        return next(
+            (m["content"] for m in chat["display"] if m["role"] == "user"), "New chat"
+        )
 
     def _frame(self, browser: dict, busy: bool = False):
         """Values for build()'s ``outs``. Busy locks everything that could
@@ -244,7 +252,10 @@ class WikiBotApp:
                         steps = {
                             "role": "assistant",
                             "content": "",
-                            "metadata": {"title": "Looking on Wikipedia…", "status": "pending"},
+                            "metadata": {
+                                "title": "Looking on Wikipedia…",
+                                "status": "pending",
+                            },
                         }
                         display.append(steps)
                     calls.append((name, args))
@@ -252,7 +263,11 @@ class WikiBotApp:
                 elif kind == "tool_result":
                     digest = event[2]
                     # Sizes of fetched text are noise here; result lists and failures are not.
-                    if steps is not None and digest and not digest.startswith(("summary:", "content:")):
+                    if (
+                        steps is not None
+                        and digest
+                        and not digest.startswith(("summary:", "content:"))
+                    ):
                         steps["content"] = f"{steps['content'].rstrip()}, {digest}\n"
                 elif kind == "done":
                     close_steps()
@@ -262,10 +277,12 @@ class WikiBotApp:
                     elif full_text:
                         display.append({"role": "assistant", "content": full_text})
                 yield self._frame(browser, busy=True)
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001
             close_steps()
             title, detail = self._friendly_error(exc)
-            display.append({"role": "assistant", "content": f"**{title}**\n\n`{detail}`"})
+            display.append(
+                {"role": "assistant", "content": f"**{title}**\n\n`{detail}`"}
+            )
         yield self._frame(browser)
 
     def new_chat(self, browser: dict):
@@ -300,7 +317,9 @@ class WikiBotApp:
                     new_btn = gr.Button("New chat", elem_id="new-chat")
                     chats = gr.Radio(show_label=False, container=False, elem_id="chats")
                     del_btn = gr.Button("Delete this chat", elem_id="delete-chat")
-                    gr.HTML(f'<div class="model">Model: {html.escape(self.model)}</div>')
+                    gr.HTML(
+                        f'<div class="model">Model: {html.escape(self.model)}</div>'
+                    )
                 with gr.Column(elem_id="main"):
                     chatbot = gr.Chatbot(
                         show_label=False,
@@ -312,7 +331,9 @@ class WikiBotApp:
                     )
                     with gr.Row(elem_id="compose"):
                         msg = self._box()
-                        send_btn = gr.Button("↑", variant="primary", elem_id="send", scale=0)
+                        send_btn = gr.Button(
+                            "↑", variant="primary", elem_id="send", scale=0
+                        )
                     gr.HTML(
                         '<div class="foot">Answers come from English Wikipedia. '
                         "Open the linked article to check anything important.</div>"
@@ -322,7 +343,9 @@ class WikiBotApp:
             demo.load(self._frame, [browser], outs)
             msg.submit(self.respond, [msg, browser], outs)
             send_btn.click(self.respond, [msg, browser], outs)
-            chatbot.example_select(self._example_text, None, msg).then(self.respond, [msg, browser], outs)
+            chatbot.example_select(self._example_text, None, msg).then(
+                self.respond, [msg, browser], outs
+            )
             new_btn.click(self.new_chat, [browser], outs)
             chats.input(self.switch_chat, [chats, browser], outs)
             del_btn.click(self.delete_chat, [browser], outs)

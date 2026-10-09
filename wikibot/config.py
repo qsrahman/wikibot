@@ -18,7 +18,7 @@ class Config:
     base_url: str | None
 
     @classmethod
-    def from_env(cls) -> "Config":
+    def from_env(cls) -> Config:
         api_key = _require_env("OPENAI_API_KEY")
         model = _require_env("OPENAI_MODEL")
         base_url = os.environ.get("OPENAI_BASE_URL", "").strip() or None
