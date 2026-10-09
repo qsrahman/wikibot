@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>wikibot — UI directions</title>
+<title>wikibot UI directions</title>
 <style>
   :root { --ink: #20262c; --dim: #6a747d; --rule: #e6e2d8; --paper: #faf9f5; }
   * { box-sizing: border-box; }
@@ -28,14 +28,69 @@
   .body h2 { margin: 0 0 4px; font-size: 17px; }
   .body .tag { font-size: 12px; color: var(--dim); margin-bottom: 8px; font-family: ui-monospace, Menlo, monospace; }
   .body p { margin: 0; font-size: 13.5px; color: var(--dim); }
+  h3 { font-size: 15px; margin: 40px 0 14px; color: var(--dim); font-weight: 600; }
+  h3:first-of-type { margin-top: 0; }
+  .thumb.pair { display: flex; }
+  .thumb.pair iframe { flex: none; width: 100%; margin-right: -50%; }
+  .thumb.pair iframe + iframe { border-left: 2px solid var(--rule); }
   .note { margin-top: 36px; font-size: 12.5px; color: var(--dim); border-top: 1px solid var(--rule); padding-top: 16px; }
 </style>
 </head>
 <body>
   <div class="wrap">
-    <h1>wikibot — four UI directions</h1>
-    <p class="lede">Static mockups of the same conversation, styled four ways. Click a card to open the full-page mockup in a new tab.</p>
+    <h1>wikibot UI directions</h1>
+    <p class="lede">Static mockups of the same two-question conversation. Each card shows the conversation and the empty screen; click one to open the full page, where a switch flips between the two.</p>
 
+    <h3>Round 2: modelled on popular chat apps</h3>
+    <div class="grid">
+      <a class="card" href="05-centered.html" target="_blank">
+        <div class="thumb pair"><iframe src="05-centered.html" title="Centered column, conversation"></iframe><iframe src="05-centered.html?state=empty" title="Centered column, empty screen"></iframe></div>
+        <div class="body">
+          <h2>Centered column</h2>
+          <div class="tag">like ChatGPT</div>
+          <p>A chat list on the left and one calm reading column. Your question sits in a pill on the right, the answer is plain text, and the lookup steps fold into one line.</p>
+        </div>
+      </a>
+
+      <a class="card" href="06-answer-page.html" target="_blank">
+        <div class="thumb pair"><iframe src="06-answer-page.html" title="Answer page, conversation"></iframe><iframe src="06-answer-page.html?state=empty" title="Answer page, empty screen"></iframe></div>
+        <div class="body">
+          <h2>Answer page</h2>
+          <div class="tag">like Perplexity</div>
+          <p>Each question becomes a page: the question as a headline, source cards first, a citation chip on every claim, and related questions to continue.</p>
+        </div>
+      </a>
+
+      <a class="card" href="07-messenger.html" target="_blank">
+        <div class="thumb pair"><iframe src="07-messenger.html" title="Messenger, conversation"></iframe><iframe src="07-messenger.html?state=empty" title="Messenger, empty screen"></iframe></div>
+        <div class="body">
+          <h2>Messenger</h2>
+          <div class="tag">like WhatsApp or iMessage</div>
+          <p>Bubbles, an avatar and timestamps in a compact window. Articles arrive as link previews and suggested replies sit above the input.</p>
+        </div>
+      </a>
+
+      <a class="card" href="08-launchpad.html" target="_blank">
+        <div class="thumb pair"><iframe src="08-launchpad.html" title="Launchpad, conversation"></iframe><iframe src="08-launchpad.html?state=empty" title="Launchpad, empty screen"></iframe></div>
+        <div class="body">
+          <h2>Launchpad</h2>
+          <div class="tag">like Gemini or Copilot</div>
+          <p>No sidebar. Opens on a large greeting with starter cards, then a roomy conversation with a source chip under each answer.</p>
+        </div>
+      </a>
+
+      <a class="card" href="09-thread.html" target="_blank">
+        <div class="thumb pair"><iframe src="09-thread.html" title="Thread, conversation"></iframe><iframe src="09-thread.html?state=empty" title="Thread, empty screen"></iframe></div>
+        <div class="body">
+          <h2>Thread</h2>
+          <div class="tag">like Slack or Discord</div>
+          <p>Dark and dense. Named message rows with times, the lookup steps as a checked list, and each article as an unfurled link.</p>
+        </div>
+      </a>
+
+    </div>
+
+    <h3>Round 1: earlier directions (Telescope is the current app)</h3>
     <div class="grid">
       <a class="card" href="01-reading-room.html" target="_blank">
         <div class="thumb"><iframe src="01-reading-room.html"></iframe></div>

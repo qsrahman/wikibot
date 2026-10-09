@@ -1,0 +1,166 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Answer page — wikibot design mockup</title>
+<style>
+  :root { --bg:#f5f8f8; --card:#fff; --ink:#13212b; --dim:#5d6b74; --rule:#dbe3e5; --teal:#0f6e6e; --tint:#e3f0ef; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body {
+    display: flex; background: var(--bg); color: var(--ink);
+    font: 16px/1.7 "Avenir Next", "Segoe UI", -apple-system, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  button { font: inherit; color: inherit; cursor: pointer; }
+  a { color: inherit; }
+  :focus-visible { outline: 2px solid var(--teal); outline-offset: 2px; }
+  .serif { font-family: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif; }
+
+  .rail { width: 64px; flex: none; border-right: 1px solid var(--rule); display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 14px 0; }
+  .rail .logo { width: 36px; height: 36px; border-radius: 10px; background: var(--teal); color: #fff; display: grid; place-items: center; font-size: 20px; margin-bottom: 12px; }
+  .rail button { width: 44px; border: 0; background: none; border-radius: 10px; padding: 7px 0 5px; font-size: 11px; color: var(--dim); display: grid; justify-items: center; gap: 2px; }
+  .rail button:hover, .rail button.on { background: var(--tint); color: var(--teal); }
+
+  .main { flex: 1; min-width: 0; display: flex; flex-direction: column; position: relative; }
+  .scroll { flex: 1; overflow-y: auto; padding: 44px 0 120px; }
+  .col { width: 100%; max-width: 760px; margin: 0 auto; padding: 0 28px; }
+
+  .turn + .turn { margin-top: 44px; padding-top: 40px; border-top: 1px solid var(--rule); }
+  .turn h1 { font-size: 34px; line-height: 1.2; font-weight: 500; letter-spacing: -0.01em; margin: 0 0 18px; }
+  .tabs { display: flex; gap: 22px; border-bottom: 1px solid var(--rule); margin-bottom: 18px; font-size: 14.5px; color: var(--dim); }
+  .tabs span { padding: 0 0 9px; }
+  .tabs .on { color: var(--ink); font-weight: 600; box-shadow: 0 2px 0 var(--teal); }
+
+  .sources { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 10px; margin-bottom: 14px; }
+  .src { display: block; text-decoration: none; background: var(--card); border: 1px solid var(--rule); border-radius: 12px; padding: 10px 12px; font-size: 13px; line-height: 1.45; }
+  .src:hover { border-color: var(--teal); }
+  .src .site { display: flex; align-items: center; gap: 7px; color: var(--dim); margin-bottom: 4px; }
+  .src .w { width: 18px; height: 18px; border-radius: 50%; background: #fff; border: 1px solid var(--rule); display: grid; place-items: center; font-size: 12px; color: var(--ink); }
+  .src b { display: block; font-size: 14px; font-weight: 600; }
+  .src .snip { color: var(--dim); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+
+  details.steps { font-size: 14px; color: var(--dim); margin-bottom: 14px; }
+  details.steps summary { cursor: pointer; }
+  details.steps ol { margin: 8px 0 0; padding-left: 22px; }
+
+  .answer p { margin: 0 0 12px; font-size: 17px; }
+  .cite { display: inline-block; vertical-align: 1px; margin-left: 3px; padding: 0 8px; border-radius: 999px; background: var(--tint); color: var(--teal); font-size: 12px; line-height: 20px; text-decoration: none; white-space: nowrap; }
+  .cite:hover { background: var(--teal); color: #fff; }
+  .acts { display: flex; gap: 6px; margin: 6px 0 22px; }
+  .acts button { border: 1px solid var(--rule); background: var(--card); border-radius: 8px; padding: 3px 11px; font-size: 13px; color: var(--dim); }
+
+  .related h2 { font-size: 15px; font-weight: 600; margin: 0 0 4px; }
+  .related button { display: flex; justify-content: space-between; width: 100%; text-align: left; border: 0; border-top: 1px solid var(--rule); background: none; padding: 10px 2px; font-size: 15.5px; }
+  .related button:hover { color: var(--teal); }
+  .related button::after { content: "+"; color: var(--teal); font-size: 18px; line-height: 1; }
+
+  .ask { position: absolute; left: 0; right: 0; bottom: 0; padding: 34px 0 22px; background: linear-gradient(to bottom, transparent, var(--bg) 42%); }
+  .composer { display: flex; align-items: center; gap: 8px; background: var(--card); border: 1px solid var(--rule); border-radius: 16px; padding: 8px 8px 8px 18px; box-shadow: 0 14px 30px -18px rgba(15,60,70,.5); }
+  .composer input { flex: 1; border: 0; background: none; font: inherit; color: inherit; height: 38px; outline: none; }
+  .composer:focus-within { border-color: var(--teal); }
+  .send { width: 38px; height: 38px; border: 0; border-radius: 11px; background: var(--teal); color: #fff; display: grid; place-items: center; }
+
+  .home { margin: auto; text-align: center; padding-bottom: 8vh; }
+  .home .word { font-size: 52px; letter-spacing: -0.02em; margin: 0 0 6px; }
+  .home .sub { color: var(--dim); margin: 0 0 26px; }
+  .home .composer { border-radius: 18px; padding: 12px 12px 12px 22px; }
+  .home ul { list-style: none; margin: 22px 0 0; padding: 0; text-align: left; }
+  .home li button { width: 100%; text-align: left; border: 0; border-top: 1px solid var(--rule); background: none; padding: 10px 4px; font-size: 15px; color: #33434e; }
+  .home li button:hover { color: var(--teal); }
+
+  body[data-state=empty] .scroll, body[data-state=empty] .ask, body[data-state=chat] .home { display: none; }
+
+  .switch { position: fixed; top: 12px; right: 12px; z-index: 9; display: flex; gap: 2px; padding: 3px; border-radius: 9px; background: #13212b; font: 12px/1 -apple-system, sans-serif; }
+  .switch[hidden] { display: none; }
+  .switch button { border: 0; background: none; color: #b5c0c6; padding: 6px 10px; border-radius: 6px; }
+  body[data-state=empty] .switch [data-s=empty], body[data-state=chat] .switch [data-s=chat] { background: #fff; color: #13212b; }
+
+  @media (max-width: 640px) { .rail { display: none; } .turn h1 { font-size: 27px; } }
+</style>
+</head>
+<body data-state="chat">
+  <nav class="rail" aria-label="Main">
+    <div class="logo serif">W</div>
+    <button class="on"><svg viewBox="0 0 16 16" width="18" height="18"><path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>New</button>
+    <button><svg viewBox="0 0 16 16" width="18" height="18"><circle cx="8" cy="8" r="5.5" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M8 5v3.2l2 1.3" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>History</button>
+  </nav>
+
+  <main class="main">
+    <div class="scroll"><div class="col">
+      <section class="turn">
+        <h1 class="serif">Who was Ada Lovelace?</h1>
+        <div class="tabs"><span class="on">Answer</span><span>Sources, 1</span><span>Steps, 2</span></div>
+        <div class="sources">
+          <a class="src" href="https://en.wikipedia.org/wiki/Ada_Lovelace">
+            <span class="site"><span class="w serif">W</span>en.wikipedia.org</span>
+            <b>Ada Lovelace</b>
+            <span class="snip">English mathematician and writer, known for her work on Charles Babbage's Analytical Engine.</span>
+          </a>
+        </div>
+        <details class="steps">
+          <summary>Completed 2 steps</summary>
+          <ol><li>Searched Wikipedia for “Ada Lovelace”</li><li>Read the summary of Ada Lovelace</li></ol>
+        </details>
+        <div class="answer">
+          <p>Ada Lovelace was an English mathematician and writer known for her work on Charles Babbage's Analytical Engine.<a class="cite" href="https://en.wikipedia.org/wiki/Ada_Lovelace">Ada Lovelace</a></p>
+          <p>She recognized that the machine had potential beyond pure calculation, and she is often considered the first computer programmer.<a class="cite" href="https://en.wikipedia.org/wiki/Ada_Lovelace">Ada Lovelace</a></p>
+        </div>
+        <div class="acts"><button>Copy</button><button>Rewrite</button></div>
+      </section>
+
+      <section class="turn">
+        <h1 class="serif">What was the Analytical Engine?</h1>
+        <div class="tabs"><span class="on">Answer</span><span>Sources, 1</span><span>Steps, 2</span></div>
+        <div class="sources">
+          <a class="src" href="https://en.wikipedia.org/wiki/Analytical_engine">
+            <span class="site"><span class="w serif">W</span>en.wikipedia.org</span>
+            <b>Analytical engine</b>
+            <span class="snip">A proposed mechanical general-purpose computer designed by Charles Babbage.</span>
+          </a>
+        </div>
+        <div class="answer">
+          <p>The Analytical Engine was a mechanical general-purpose computer designed by Charles Babbage. He first described it in 1837 as the successor to his Difference Engine.<a class="cite" href="https://en.wikipedia.org/wiki/Analytical_engine">Analytical engine</a></p>
+        </div>
+        <div class="acts"><button>Copy</button><button>Rewrite</button></div>
+        <div class="related">
+          <h2>Related</h2>
+          <button>What was the Difference Engine?</button>
+          <button>Who was Charles Babbage?</button>
+          <button>Was the Analytical Engine ever built?</button>
+        </div>
+      </section>
+    </div></div>
+
+    <div class="ask"><div class="col">
+      <form class="composer" onsubmit="return false">
+        <input aria-label="Follow-up question" placeholder="Ask a follow-up">
+        <button class="send" aria-label="Send question"><svg viewBox="0 0 16 16" width="16" height="16"><path d="M3 8h10M8.5 3.5 13 8l-4.5 4.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+      </form>
+    </div></div>
+
+    <div class="home"><div class="col">
+      <p class="word serif">wikibot</p>
+      <p class="sub">Answers from English Wikipedia, with the article behind every claim.</p>
+      <form class="composer" onsubmit="return false">
+        <input aria-label="Your question" placeholder="Look something up">
+        <button class="send" aria-label="Send question"><svg viewBox="0 0 16 16" width="16" height="16"><path d="M3 8h10M8.5 3.5 13 8l-4.5 4.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+      </form>
+      <ul>
+        <li><button>Who was Ada Lovelace?</button></li>
+        <li><button>How tall is the Eiffel Tower?</button></li>
+        <li><button>When was the first Turing Award given?</button></li>
+      </ul>
+    </div></div>
+  </main>
+
+  <div class="switch"><button data-s="empty">Empty</button><button data-s="chat">Conversation</button></div>
+  <script>
+    document.body.dataset.state = new URLSearchParams(location.search).get("state") || "chat";
+    const sw = document.querySelector(".switch");
+    if (self !== top) sw.hidden = true;
+    sw.querySelectorAll("button").forEach(b => b.onclick = () => document.body.dataset.state = b.dataset.s);
+  </script>
+</body>
+</html>
