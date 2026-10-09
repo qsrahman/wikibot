@@ -43,12 +43,16 @@ Opens a Gradio chat app on http://localhost:7860 with:
 - **centered-column layout** — a chat list on the left and one reading column;
   your question in a pill on the right, the answer as plain text
 - **several chats** — New chat starts one, the list switches between them,
-  Delete this chat removes the open one
+  Delete this chat removes the open one; listed under Today, Yesterday and
+  Earlier by when they were last used
+- **Try again** — the button under the last answer asks that question afresh
 - **streaming answers** — live tokens; the input is locked while the agent works
 - **lookup steps** — each answer's tool calls fold into one line such as
   "Searched Wikipedia and read 1 article"; click it for the details
 - citations as clickable links that open in a new tab
-- **persistent chats** across reloads (localStorage)
+- **persistent chats** across reloads (localStorage); an answer cut off by a
+  closed tab is marked "Lookup interrupted" and the chat stays usable
+- on a phone-width screen the chat list becomes a strip across the top
 - copy buttons and friendly error bubbles
 
 Same backend as the CLI — `wikibot/agent.py` + `wikibot/wiki.py` are shared.

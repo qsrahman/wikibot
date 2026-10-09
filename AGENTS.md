@@ -37,7 +37,7 @@ prints tool lines and deltas as they arrive and ignores `tool_result`.
 
 | File | Purpose |
 |------|---------|
-| `wikibot/wiki.py` | `WikipediaClient` — the only place that talks to `wikipediaapi` |
+| `wikibot/wiki.py` | `WikipediaClient` — the only place that talks to Wikipedia: `wikipediaapi`, plus one direct `httpx` query for summaries |
 | `wikibot/agent.py` | `Agent`, tool schemas, dispatch, `run_turn`, system prompt |
 | `wikibot/cli.py` | `Repl` |
 | `wikibot/webui.py` | `WikiBotApp` — Gradio app: a list of chats (display + agent history each) in `gr.BrowserState` |
@@ -54,6 +54,10 @@ connection, `Agent(client, model)` wraps the OpenAI client, `Repl` and
 - **Never call `wikipediaapi` outside `wiki.py`.** `agent.py` sees only the
   adapter's dict-returning methods. New Wikipedia capability = one method on
   `WikipediaClient` + one tool schema in `agent.py`.
+- **Summaries skip `wikipediaapi`.** `WikipediaClient._intro` asks the
+  MediaWiki API directly, because the library downloads the whole article for
+  a summary and cannot flag disambiguation pages. Everything else goes
+  through the library; keep any other direct query in `wiki.py` too.
 - **Shape output before the model sees it.** Strip HTML from search snippets,
   JSON-encode tool results, truncate `page_content` / `page_section` at `MAX_CONTENT_CHARS`
   **with the `truncated` flag set** — never trim silently. A truncated result
@@ -63,6 +67,11 @@ connection, `Agent(client, model)` wraps the OpenAI client, `Repl` and
   exceptions and returns `{"error": ...}` as the tool output so the model can
   recover and the REPL turn never crashes. Same rule at the REPL boundary:
   `cli.py` catches, prints, keeps the session alive.
+- **A turn always ends in an answer.** The last of `max_tool_rounds` requests
+  is sent without tools and with an "out of lookups" user message that is not
+  kept in history, so the model answers from what it gathered. A blank reply
+  is retried once, then reported. `done` text has odd citation markers
+  (`【Title】`) rewritten as links, using only URLs the tools returned.
 - **`function_call` and its `function_call_output` are appended to history
   together**, in order. Splitting a pair makes the API reject the request.
   History lives with the entrypoint: a mutable list in `Repl`, one
@@ -82,8 +91,8 @@ connection, `Agent(client, model)` wraps the OpenAI client, `Repl` and
 
 ## Adding a tool
 
-1. Method on `WikipediaClient` in `wiki.py` returning a plain dict (no HTML,
-   no exceptions).
+1. Method on `WikipediaClient` in `wiki.py` returning a plain dict (no HTML;
+   a missing page or section is data, network errors may raise).
 2. Schema in `agent.py` `TOOLS` (strict mode shape).
 3. One row in `agent.py` `_TOOL_CALLS` mapping the tool to its wiki method.
 4. Live-test the call path before committing.
@@ -100,8 +109,8 @@ connection, `Agent(client, model)` wraps the OpenAI client, `Repl` and
   `uv run --env-file /dev/null -m wikibot`).
 - Web UI: `uv run --env-file .env python -m wikibot.webui` → serves
   http://localhost:7860; one turn must show a lookup-steps line then a streamed
-  cited answer; New chat must start with both histories empty, and Delete
-  this chat must remove both.
+  cited answer; New chat must start with both histories empty, Delete
+  this chat must remove both, and Try again must replace the last answer.
 - Engine check without a browser:
   `list(Agent(OpenAI(api_key=cfg.api_key, base_url=cfg.base_url), cfg.model).run_turn([], "msg"))`
   → event order `tool … → delta … → done`, every `function_call` paired with
