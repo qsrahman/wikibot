@@ -43,6 +43,7 @@ prints tool lines and deltas as they arrive and ignores `tool_result`.
 | `wikibot/webui.py` | `WikiBotApp` — Gradio app: a list of chats (display + agent history each) in `gr.BrowserState` |
 | `wikibot/config.py` | `Config` — the only place `.env` is read |
 | `wikibot/__main__.py` | `python -m wikibot` entry |
+| `tests/` | Offline `unittest` suite: no network, no API key |
 
 Classes hold a session's moving parts: `WikipediaClient` wraps the wikipedia
 connection, `Agent(client, model)` wraps the OpenAI client, `Repl` and
@@ -89,6 +90,11 @@ connection, `Agent(client, model)` wraps the OpenAI client, `Repl` and
 
 ## Verification
 
+- `uv run python -m unittest` must pass. It runs offline against stand-ins
+  for the OpenAI stream and `wikipediaapi`, so it checks the rules above
+  (paired calls, failures as data, the `truncated` flag, the env-var message)
+  but not the live services; the checks below still apply to changes that
+  touch them. A new tool or event gets a test alongside it.
 - `uv run --env-file .env -m wikibot` must start (or fail naming the exact
   missing env var — that message is the contract, don't break it; test with
   `uv run --env-file /dev/null -m wikibot`).
