@@ -19,6 +19,52 @@ def _style(text: str, kind: str) -> str:
     return f"{_STYLES[kind]}{text}{_STYLES['reset']}"
 
 
+def _dim(text: str) -> str:
+    return _style(text, "dim")
+
+
+def _amber(text: str) -> str:
+    return _style(text, "amber")
+
+
+def _red(text: str) -> str:
+    return _style(text, "red")
+
+
+class _StreamPrinter:
+    """Prints the response stream.
+
+    Tracks the in-progress answer line so a tool call, an error, or Ctrl-C
+    can break out of it cleanly instead of printing in the middle of a word.
+    """
+
+    def __init__(self) -> None:
+        self.streaming = False
+
+    def _break_line(self) -> None:
+        if self.streaming:
+            print()
+            self.streaming = False
+
+    def tool(self, name: str, args: dict) -> None:
+        self._break_line()
+        print(_dim(f"  -> {name}({json.dumps(args, ensure_ascii=False)})"))
+
+    def delta(self, text: str) -> None:
+        if not self.streaming:
+            print()
+            self.streaming = True
+        print(text, end="", flush=True)
+
+    def message(self, text: str) -> None:
+        """Standalone final message, shown when nothing was streamed."""
+        if not self.streaming:
+            print(f"\n{text}", end="")
+
+    def finish(self) -> None:
+        self._break_line()
+
+
 class Repl:
     """Prompt loop owning one conversation history for one Agent."""
 
@@ -26,37 +72,27 @@ class Repl:
         self.agent = agent
         self.history: list[dict] = []
 
-    def _handle(self, user: str) -> None:
-        streamed = False
+    def _answer(self, user: str) -> None:
+        """Run one message and print its tool calls and streamed answer."""
         history_len = len(self.history)
+        printer = _StreamPrinter()
         try:
             for event in self.agent.run_turn(self.history, user):
-                if event[0] == "tool":
-                    if streamed:
-                        print()
-                        streamed = False
-                    args = json.dumps(event[2], ensure_ascii=False)
-                    print(_style(f"  -> {event[1]}({args})", "dim"))
-                elif event[0] == "delta":
-                    if not streamed:
-                        print()
-                        streamed = True
-                    print(event[1], end="", flush=True)
-                elif event[0] == "done" and not streamed:
-                    # No deltas: e.g. the tool-round-limit message.
-                    print(f"\n{event[1]}", end="")
+                match event:
+                    case ("tool", name, args):
+                        printer.tool(name, args)
+                    case ("delta", text):
+                        printer.delta(text)
+                    case ("done", text):
+                        printer.message(text)
+            print()
         except KeyboardInterrupt:
-            if streamed:
-                print()
+            printer.finish()
             del self.history[history_len:]
-            print(_style("aborted — history rolled back to last complete turn", "amber"))
-            return
+            print(_amber("aborted — history rolled back to last complete turn"))
         except Exception as exc:
-            if streamed:
-                print()
-            print(_style(f"error: {type(exc).__name__}: {exc}", "red"))
-            return
-        print("\n")
+            printer.finish()
+            print(_red(f"error: {type(exc).__name__}: {exc}"))
 
     def run(self) -> None:
         print("wikibot — answers from English Wikipedia.")
@@ -74,9 +110,9 @@ class Repl:
                 return
             if user == ".reset":
                 self.history.clear()
-                print(_style("history cleared", "amber"))
+                print(_amber("history cleared"))
                 continue
-            self._handle(user)
+            self._answer(user)
 
 
 def main() -> None:
