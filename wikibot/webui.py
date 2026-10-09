@@ -23,49 +23,10 @@ from .config import Config
 
 config = Config.from_env()
 
-INK = "#1c1d1f"
-DIM = "#6b6f76"
-RULE = "#e6e6e2"
-SIDE = "#f6f6f4"
-PILL = "#efefec"
-LINK = "#3366cc"
+_THEME = gr.themes.Soft()
 
-_FONT = ["-apple-system", "BlinkMacSystemFont", "Segoe UI", "Roboto", "sans-serif"]
-
-_THEME = gr.themes.Base(
-    primary_hue="neutral",
-    neutral_hue="stone",
-    font=_FONT,
-    radius_size=gr.themes.sizes.radius_md,
-).set(
-    body_background_fill="#fff",
-    body_text_color=INK,
-    body_text_size="16px",
-    block_background_fill="#fff",
-    block_border_width="0px",
-    background_fill_primary="#fff",
-    background_fill_secondary=SIDE,
-    border_color_primary=RULE,
-    color_accent=INK,
-    color_accent_soft=PILL,
-    input_background_fill="#fff",
-    link_text_color=LINK,
-    link_text_color_hover=LINK,
-    button_primary_background_fill=INK,
-    button_primary_background_fill_hover="#000",
-    button_primary_text_color="#fff",
-    button_secondary_background_fill="#fff",
-    button_secondary_background_fill_hover=SIDE,
-    button_secondary_border_color=RULE,
-    button_secondary_text_color=INK,
-    error_background_fill="#fdf1f0",
-    error_border_color="#e9b8b3",
-    error_text_color="#8f2d24",
-)
-
-# The palette is light only; drop the dark class Gradio adds for dark-mode OSes.
-_FORCE_LIGHT = "() => document.body.classList.remove('dark')"
-
+# Layout only: every colour is a theme variable, so light and dark both follow
+# the theme.
 CSS = """
 footer { display: none !important; }
 .gradio-container, .gradio-container .main { max-width: none !important; padding: 0 !important; }
@@ -74,22 +35,22 @@ footer { display: none !important; }
 #shell .generating { border: 0 !important; }
 
 /* chat list */
-#side { background: #f6f6f4; padding: 12px; gap: 6px; flex: none; width: 260px; height: 100%; font-size: 14px; }
+#side { background: var(--background-fill-secondary); border-right: 1px solid var(--border-color-primary); padding: 12px; gap: 6px; flex: none; width: 260px; height: 100%; font-size: 14px; }
 #side .brand { font-weight: 650; font-size: 16px; padding: 8px 10px 6px; }
-#side .model { color: #6b6f76; font-size: 12.5px; padding: 10px; border-top: 1px solid #e6e6e2; }
-#new-chat { justify-content: flex-start; border-radius: 10px; font-weight: 400; margin-bottom: 8px; }
+#side .model { color: var(--body-text-color-subdued); font-size: 12.5px; padding: 10px; border-top: 1px solid var(--border-color-primary); }
+#new-chat { margin-bottom: 8px; }
 #chats { flex: 1; overflow-y: auto; border: 0 !important; background: none; padding: 0; }
 #chats .wrap { flex-direction: column; flex-wrap: nowrap; gap: 2px; }
-#chats label { display: block; width: 100%; padding: 7px 10px; border: 0; border-radius: 8px; background: none; box-shadow: none; cursor: pointer; }
+#chats label { display: block; width: 100%; padding: 7px 10px; border: 0; border-radius: var(--radius-lg); background: none; box-shadow: none; cursor: pointer; }
 #chats label input { display: none; }
-#chats label span { margin: 0; font-size: 14px; display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-#chats label:hover { background: #eeeeea; }
-#chats label.selected { background: #e9e9e5; }
-#delete-chat { border: 0; background: none; box-shadow: none; color: #6b6f76; font-size: 13px; font-weight: 400; justify-content: flex-start; }
-#delete-chat:hover { color: #8f2d24; }
+#chats label span { margin: 0; font-size: 14px; color: var(--body-text-color); display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#chats label:hover { background: var(--background-fill-primary); }
+#chats label.selected { background: var(--color-accent-soft); }
+#delete-chat { border: 0; background: none; box-shadow: none; color: var(--body-text-color-subdued); font-size: 13px; font-weight: 400; justify-content: flex-start; }
+#delete-chat:hover { color: var(--error-text-color); }
 
 /* reading column */
-#main { height: 100%; gap: 0; min-width: 0; }
+#main { height: 100%; gap: 0; min-width: 0; background: var(--background-fill-primary); }
 #chatbot { flex: 1; min-height: 0; height: auto !important; border: 0; background: none; }
 #chatbot .bubble-wrap, #chatbot .message-wrap { background: none; }
 #chatbot .message-wrap { max-width: 740px; width: 100%; margin: 0 auto; padding: 36px 24px 12px; }
@@ -97,19 +58,18 @@ footer { display: none !important; }
 
 /* messages */
 #chatbot .message { box-shadow: none; font-size: 16px; line-height: 1.65; }
-#chatbot .user { background: #efefec; border: 0; border-radius: 22px; padding: 10px 18px; }
+#chatbot .user { background: var(--color-accent-soft); border: 0; border-radius: 22px; padding: 10px 18px; }
 #chatbot .bot, #chatbot .bot .message { background: none; border: 0; padding: 0; }
 #chatbot .bot-row .flex-wrap { width: 100%; max-width: 100%; }
 #chatbot .message-buttons-right { display: none; }
-#chatbot .bot a { color: #3366cc; text-decoration: none; border-bottom: 1px solid #c3d1ee; }
-#chatbot .bot a:hover { border-bottom-color: #3366cc; }
+#chatbot .bot a { color: var(--link-text-color); }
 
 /* lookup steps */
 #chatbot .thought-group { margin: 0 0 6px; padding: 0; border: 0; background: none; }
-#chatbot .thought-group .content .md, #chatbot .thought-group .content li { color: #6b6f76; font-size: 14px; }
-#chatbot .thought-group .title { padding: 0; background: none; color: #6b6f76; font-size: 14px; }
-#chatbot .thought-group .title .md, #chatbot .thought-group .title .md p { color: #6b6f76; font-size: 14px; margin: 0; }
-#chatbot .thought-group .content { color: #6b6f76; font-size: 14px; border-left: 2px solid #e6e6e2; padding-left: 14px; margin: 6px 0 4px; }
+#chatbot .thought-group .content .md, #chatbot .thought-group .content li { color: var(--body-text-color-subdued); font-size: 14px; }
+#chatbot .thought-group .title { padding: 0; background: none; color: var(--body-text-color-subdued); font-size: 14px; }
+#chatbot .thought-group .title .md, #chatbot .thought-group .title .md p { color: var(--body-text-color-subdued); font-size: 14px; margin: 0; }
+#chatbot .thought-group .content { border-left: 2px solid var(--border-color-primary); padding-left: 14px; margin: 6px 0 4px; }
 #chatbot .thought-group .content ul { list-style: none; margin: 0; padding: 0; }
 
 /* empty screen */
@@ -117,16 +77,16 @@ footer { display: none !important; }
 #chatbot .placeholder { flex: none; height: auto; }
 #chatbot .placeholder h1 { margin: 0; font-size: 30px; font-weight: 600; letter-spacing: -0.02em; text-align: center; }
 #chatbot .examples { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin: 0; }
-#chatbot .example { width: auto; flex: none; border: 1px solid #e6e6e2; background: #fff; border-radius: 999px; padding: 7px 14px; font-size: 14px; color: #3c3f44; box-shadow: none; }
-#chatbot .example:hover { background: #f6f6f4; }
+#chatbot .example { width: auto; flex: none; border: 1px solid var(--border-color-primary); background: var(--background-fill-primary); border-radius: 999px; padding: 7px 14px; font-size: 14px; color: var(--body-text-color); box-shadow: none; }
+#chatbot .example:hover { background: var(--background-fill-secondary); }
 
 /* composer */
-#compose { position: relative; border: 1px solid #d9d9d4; border-radius: 26px; padding: 8px 54px 8px 20px; box-shadow: 0 6px 20px -14px rgba(20, 25, 30, .45); flex: none; }
-#compose:focus-within { border-color: #a9a9a3; }
+#compose { position: relative; border: 1px solid var(--border-color-primary); background: var(--input-background-fill); border-radius: 26px; padding: 8px 54px 8px 20px; box-shadow: var(--shadow-drop-lg); flex: none; }
+#compose:focus-within { border-color: var(--color-accent); }
 #compose .block, #compose label, #compose .input-container { border: 0 !important; box-shadow: none !important; background: none !important; }
 #compose textarea { border: 0 !important; box-shadow: none !important; background: none; font-size: 16px; padding: 7px 0; }
 #send { position: absolute; right: 8px; bottom: 8px; width: 38px !important; min-width: 38px !important; max-width: 38px !important; height: 38px; padding: 0; border-radius: 50%; font-size: 18px; line-height: 1; }
-#main .foot { text-align: center; color: #6b6f76; font-size: 12.5px; padding: 10px 0 14px; flex: none; }
+#main .foot { text-align: center; color: var(--body-text-color-subdued); font-size: 12.5px; padding: 10px 0 14px; flex: none; }
 
 /* one clear affordance: the Chatbot's built-in Clear only resets visible chat */
 #chatbot button[aria-label="Clear"] { display: none; }
@@ -372,4 +332,4 @@ class WikiBotApp:
 
 
 if __name__ == "__main__":
-    WikiBotApp(config).build().launch(theme=_THEME, css=CSS, js=_FORCE_LIGHT, footer_links=[])
+    WikiBotApp(config).build().launch(theme=_THEME, css=CSS, footer_links=[])
