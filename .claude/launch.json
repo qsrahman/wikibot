@@ -4,8 +4,25 @@
     {
       "name": "wikibot-webui",
       "runtimeExecutable": "uv",
-      "runtimeArgs": ["run", "--env-file", ".env", "python", "-m", "wikibot.webui"],
+      "runtimeArgs": [
+        "run",
+        "--env-file",
+        ".env",
+        "python",
+        "-m",
+        "wikibot.webui"
+      ],
       "port": 7860
+    },
+    {
+      "name": "theme-gallery",
+      "runtimeExecutable": "uv",
+      "runtimeArgs": [
+        "run",
+        "python",
+        "design/theme_gallery.py"
+      ],
+      "port": 7861
     }
   ]
 }
