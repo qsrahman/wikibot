@@ -84,7 +84,7 @@ connection, `Agent(client, model)` wraps the OpenAI client, `Repl` and
 1. Method on `WikipediaClient` in `wiki.py` returning a plain dict (no HTML,
    no exceptions).
 2. Schema in `agent.py` `TOOLS` (strict mode shape).
-3. One branch in `agent.py` `_dispatch`.
+3. One row in `agent.py` `_TOOL_CALLS` mapping the tool to its wiki method.
 4. Live-test the call path before committing.
 
 ## Verification

@@ -189,6 +189,16 @@ TOOLS = [
 ]
 
 
+_TOOL_CALLS: dict[str, tuple[str, tuple[str, ...]]] = {
+    "search_wikipedia": ("search_wikipedia", ("query", "limit")),
+    "get_page_summary": ("page_summary", ("title",)),
+    "get_page_content": ("page_content", ("title",)),
+    "get_page_section": ("page_section", ("title", "section")),
+    "get_page_links": ("page_links", ("title", "limit")),
+    "get_random_pages": ("random_pages", ("limit",)),
+}
+
+
 class Agent:
     """Runs the Responses API loop and dispatches Wikipedia tool calls.
 
@@ -211,21 +221,13 @@ class Agent:
         self.max_tool_rounds = max_tool_rounds
 
     def _dispatch(self, name: str, arguments: dict) -> str:
+        """Call the wiki method a tool maps to; failures become data."""
         try:
-            if name == "search_wikipedia":
-                result = self.wiki.search_wikipedia(arguments["query"], arguments["limit"])
-            elif name == "get_page_summary":
-                result = self.wiki.page_summary(arguments["title"])
-            elif name == "get_page_content":
-                result = self.wiki.page_content(arguments["title"])
-            elif name == "get_page_section":
-                result = self.wiki.page_section(arguments["title"], arguments["section"])
-            elif name == "get_page_links":
-                result = self.wiki.page_links(arguments["title"], arguments["limit"])
-            elif name == "get_random_pages":
-                result = self.wiki.random_pages(arguments["limit"])
-            else:
-                result = {"error": f"unknown tool: {name}"}
+            method, arg_names = _TOOL_CALLS[name]
+        except KeyError:
+            return json.dumps({"error": f"unknown tool: {name}"}, ensure_ascii=False)
+        try:
+            result = getattr(self.wiki, method)(*(arguments[arg] for arg in arg_names))
         except Exception as exc:
             result = {"error": f"{type(exc).__name__}: {exc}"}
         return json.dumps(result, ensure_ascii=False)
@@ -290,7 +292,10 @@ class Agent:
         so a call can never be left without its output.
         """
         history.append({"role": "user", "content": user_message})
-        final_text = ""
+        final_text = (
+            f"Stopped: tool call limit reached ({self.max_tool_rounds} rounds)"
+            " for this message."
+        )
         for _ in range(self.max_tool_rounds):
             response = None
             with self.client.responses.create(
@@ -334,9 +339,4 @@ class Agent:
                     }
                 )
                 yield ("tool_result", call.name, self._digest(call.name, output))
-        else:
-            final_text = (
-                "Stopped: tool call limit reached"
-                f" ({self.max_tool_rounds} rounds) for this message."
-            )
         yield ("done", final_text)
