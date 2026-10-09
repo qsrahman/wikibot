@@ -13,8 +13,9 @@ class FakeSection:
 
 
 class FakePage:
-    def __init__(self, title, summary="", sections=(), links=(), exists=True):
+    def __init__(self, title, summary="", sections=(), links=(), exists=True, disambiguation=False):
         self.title, self.summary, self.sections = title, summary, list(sections)
+        self.disambiguation = disambiguation
         self.links = {name: None for name in links}
         self.fullurl = f"https://en.wikipedia.org/wiki/{title.replace(' ', '_')}"
         self._exists = exists
@@ -40,11 +41,22 @@ class FakePage:
 
 
 class FakeWikipedia:
-    """Stands in for wikipediaapi.Wikipedia; unknown titles do not exist."""
+    """Stands in for Wikipedia, both through wikipediaapi and through the
+    direct intro query; unknown titles do not exist."""
 
-    def __init__(self, *pages, search=None):
+    def __init__(self, *pages, search=None, redirects=None):
         self.pages = {page.title: page for page in pages}
         self.search_result = search
+        self.redirects = redirects or {}
+
+    def intro(self, title):
+        page = self.page(self.redirects.get(title, title))
+        if not page.exists():
+            return {"title": title, "missing": True, "fullurl": page.fullurl}
+        out = {"title": page.title, "extract": page.summary + "\n", "fullurl": page.fullurl}
+        if page.disambiguation:
+            out["pageprops"] = {"disambiguation": ""}
+        return out
 
     def page(self, title):
         return self.pages.get(title, FakePage(title, exists=False))
@@ -56,9 +68,10 @@ class FakeWikipedia:
         return dict(list(self.pages.items())[:limit])
 
 
-def client(*pages, search=None) -> WikipediaClient:
+def client(*pages, search=None, redirects=None) -> WikipediaClient:
     wiki = WikipediaClient()
-    wiki._wiki = FakeWikipedia(*pages, search=search)
+    wiki._wiki = FakeWikipedia(*pages, search=search, redirects=redirects)
+    wiki._intro = wiki._wiki.intro
     return wiki
 
 
@@ -119,6 +132,19 @@ class Pages(unittest.TestCase):
                 "url": "https://en.wikipedia.org/wiki/Ada_Lovelace",
             },
         )
+
+    def test_summary_of_a_redirect_uses_the_target_title(self):
+        uk = FakePage("United Kingdom", summary="A country.")
+        out = client(uk, redirects={"UK": "United Kingdom"}).page_summary("UK")
+        self.assertEqual(out["title"], "United Kingdom")
+        self.assertEqual(out["url"], "https://en.wikipedia.org/wiki/United_Kingdom")
+
+    def test_summary_flags_a_disambiguation_page(self):
+        mercury = FakePage("Mercury", summary="Mercury most commonly refers to:", disambiguation=True)
+        out = client(mercury).page_summary("Mercury")
+        self.assertIs(out["disambiguation"], True)
+        self.assertIn("not an article", out["hint"])
+        self.assertNotIn("disambiguation", client(FakePage("Ada", summary="x")).page_summary("Ada"))
 
     def test_short_content_is_whole_and_unflagged(self):
         out = client(FakePage("Tiny", summary="All of it.")).page_content("Tiny")
