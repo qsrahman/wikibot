@@ -5,8 +5,10 @@ lookup steps of each answer folded into a single line.
 """
 
 import html
+import time
 import uuid
 from collections import defaultdict
+from datetime import date, timedelta
 
 import gradio as gr
 from openai import (
@@ -39,7 +41,10 @@ footer { display: none !important; }
 #side .brand { font-weight: 650; font-size: 16px; padding: 8px 10px 6px; }
 #side .model { color: var(--body-text-color-subdued); font-size: 12.5px; padding: 10px; border-top: 1px solid var(--border-color-primary); }
 #new-chat { margin-bottom: 8px; }
-#chats { flex: 1; overflow-y: auto; border: 0 !important; background: none; padding: 0; }
+#chats { flex: 1 1 0; min-height: 0; overflow-y: auto; flex-wrap: nowrap; gap: 10px; }
+#chats .form, #chats fieldset { border: 0 !important; background: none; padding: 0; flex: none; box-shadow: none; }
+#chats .form { gap: 10px; }
+#chats [data-testid="block-info"] { color: var(--body-text-color-subdued); font-size: 12.5px; font-weight: 400; padding: 0 10px 4px; margin: 0; background: none; }
 #chats .wrap { flex-direction: column; flex-wrap: nowrap; gap: 2px; }
 #chats label { display: block; width: 100%; padding: 7px 10px; border: 0; border-radius: var(--radius-lg); background: none; box-shadow: none; cursor: pointer; }
 #chats label input { display: none; }
@@ -91,8 +96,23 @@ footer { display: none !important; }
 /* one clear affordance: the Chatbot's built-in Clear only resets visible chat */
 #chatbot button[aria-label="Clear"] { display: none; }
 
-@media (max-width: 760px) { #side { display: none; } }
+/* phone: the chat list becomes a strip across the top */
+@media (max-width: 760px) {
+  #shell { flex-direction: column; }
+  #side { width: 100%; height: auto; flex-direction: row; flex-wrap: wrap; align-items: center; gap: 8px; padding: 8px 12px; border-right: 0; border-bottom: 1px solid var(--border-color-primary); }
+  #brand, #model, #chats [data-testid="block-info"] { display: none; }
+  #new-chat, #delete-chat { flex: none; width: auto; min-width: 0; margin: 0; }
+  #delete-chat { margin-left: auto; }
+  #chats { order: 1; flex: 0 0 100%; flex-direction: row; min-width: 0 !important; overflow-x: auto; overflow-y: hidden; }
+  #chats .form, #chats .wrap { flex-direction: row; flex-wrap: nowrap; gap: 4px; }
+  #chats fieldset { min-width: 0 !important; overflow: visible !important; }
+  #chats label { width: auto; max-width: 150px; flex: none; }
+  #main { flex: 1; min-height: 0; height: auto; }
+}
 """
+
+# Chat list headings, by the day a chat was last used.
+GROUPS = ("Today", "Yesterday", "Earlier")
 
 EXAMPLES = [
     "Who was Ada Lovelace?",
@@ -178,13 +198,17 @@ class WikiBotApp:
         return name, detail
 
     @staticmethod
+    def _new_chat() -> dict:
+        return {"id": uuid.uuid4().hex[:8], "display": [], "agent": [], "updated": time.time()}
+
+    @staticmethod
     def _active(browser: dict) -> dict:
         """The chat being shown; starts one if there is none."""
         chats = browser["chats"]
         chat = next((c for c in chats if c["id"] == browser["active"]), None)
         if chat is None:
             if not chats:
-                chats.append({"id": uuid.uuid4().hex[:8], "display": [], "agent": []})
+                chats.append(WikiBotApp._new_chat())
             chat = chats[0]
             browser["active"] = chat["id"]
         return chat
@@ -196,22 +220,61 @@ class WikiBotApp:
             (m["content"] for m in chat["display"] if m["role"] == "user"), "New chat"
         )
 
+    @staticmethod
+    def _group(chat: dict, today: date) -> str:
+        """Which of GROUPS a chat is listed under, by the day it was last used."""
+        used = date.fromtimestamp(chat.get("updated", 0))
+        if used >= today:
+            return GROUPS[0]
+        return GROUPS[1] if used == today - timedelta(days=1) else GROUPS[2]
+
     def _frame(self, browser: dict, busy: bool = False):
         """Values for build()'s ``outs``. Busy locks everything that could
         change the active chat while an answer is streaming into it."""
         chat = self._active(browser)
+        today = date.today()
+        lists = []
+        for group in GROUPS:
+            ids = [
+                (self._title(c), c["id"])
+                for c in browser["chats"]
+                if self._group(c, today) == group
+            ]
+            lists.append(
+                gr.Radio(
+                    choices=ids,
+                    # None clears the selection a list held before a switch.
+                    value=chat["id"] if (self._title(chat), chat["id"]) in ids else None,
+                    interactive=not busy,
+                    visible=bool(ids),
+                )
+            )
         return (
             chat["display"],
             self._box(interactive=not busy),
             browser,
-            gr.Radio(
-                choices=[(self._title(c), c["id"]) for c in browser["chats"]],
-                value=chat["id"],
-                interactive=not busy,
-            ),
+            *lists,
             gr.Button(interactive=not busy),
             gr.Button(interactive=not busy),
         )
+
+    def load(self, browser: dict):
+        """First frame for a browser. Repairs chats whose answer was cut off
+        mid-lookup, by a closed tab or a stopped server."""
+        for chat in browser["chats"]:
+            for message in chat["display"]:
+                if message.get("metadata", {}).get("status") == "pending":
+                    message["metadata"] = {"title": "Lookup interrupted", "status": "done"}
+            # The API rejects a function_call that has no output.
+            answered = {
+                h["call_id"] for h in chat["agent"] if h.get("type") == "function_call_output"
+            }
+            chat["agent"] = [
+                h
+                for h in chat["agent"]
+                if h.get("type") != "function_call" or h["call_id"] in answered
+            ]
+        return self._frame(browser)
 
     def respond(self, user_msg: str, browser: dict):
         """Chat generator: echo the user message, then stream steps + answer."""
@@ -223,6 +286,10 @@ class WikiBotApp:
             return
 
         display.append({"role": "user", "content": user_msg})
+        # The chat list is ordered by last use.
+        chat["updated"] = time.time()
+        browser["chats"].remove(chat)
+        browser["chats"].insert(0, chat)
         yield self._frame(browser, busy=True)
 
         text_index: int | None = None
@@ -285,9 +352,25 @@ class WikiBotApp:
             )
         yield self._frame(browser)
 
+    def retry(self, browser: dict):
+        """Try again: drop the last question's turn from both histories and
+        ask it afresh."""
+        chat = self._active(browser)
+        display, agent_hist = chat["display"], chat["agent"]
+        asked = [i for i, m in enumerate(display) if m["role"] == "user"]
+        if not asked:
+            yield self._frame(browser)
+            return
+        question = display[asked[-1]]["content"]
+        del display[asked[-1] :]
+        # Each question is one user item in the agent history, in the same order.
+        sent = [i for i, h in enumerate(agent_hist) if h.get("role") == "user"]
+        del agent_hist[sent[len(asked) - 1] :]
+        yield from self.respond(question, browser)
+
     def new_chat(self, browser: dict):
         if self._active(browser)["display"]:
-            chat = {"id": uuid.uuid4().hex[:8], "display": [], "agent": []}
+            chat = self._new_chat()
             browser["chats"].insert(0, chat)
             browser["active"] = chat["id"]
         return self._frame(browser)
@@ -313,12 +396,18 @@ class WikiBotApp:
             )
             with gr.Row(elem_id="shell"):
                 with gr.Column(scale=0, min_width=260, elem_id="side"):
-                    gr.HTML('<div class="brand">wikibot</div>')
+                    gr.HTML('<div class="brand">wikibot</div>', elem_id="brand")
                     new_btn = gr.Button("New chat", elem_id="new-chat")
-                    chats = gr.Radio(show_label=False, container=False, elem_id="chats")
+                    with gr.Column(elem_id="chats"):
+                        # One list per day group; _frame keeps at most one selected.
+                        lists = [
+                            gr.Radio(label=group, visible=False)
+                            for group in GROUPS
+                        ]
                     del_btn = gr.Button("Delete this chat", elem_id="delete-chat")
                     gr.HTML(
-                        f'<div class="model">Model: {html.escape(self.model)}</div>'
+                        f'<div class="model">Model: {html.escape(self.model)}</div>',
+                        elem_id="model",
                     )
                 with gr.Column(elem_id="main"):
                     chatbot = gr.Chatbot(
@@ -339,15 +428,17 @@ class WikiBotApp:
                         "Open the linked article to check anything important.</div>"
                     )
 
-            outs = [chatbot, msg, browser, chats, new_btn, del_btn]
-            demo.load(self._frame, [browser], outs)
+            outs = [chatbot, msg, browser, *lists, new_btn, del_btn]
+            demo.load(self.load, [browser], outs)
             msg.submit(self.respond, [msg, browser], outs)
             send_btn.click(self.respond, [msg, browser], outs)
             chatbot.example_select(self._example_text, None, msg).then(
                 self.respond, [msg, browser], outs
             )
             new_btn.click(self.new_chat, [browser], outs)
-            chats.input(self.switch_chat, [chats, browser], outs)
+            for chat_list in lists:
+                chat_list.input(self.switch_chat, [chat_list, browser], outs)
+            chatbot.retry(self.retry, [browser], outs)
             del_btn.click(self.delete_chat, [browser], outs)
 
         demo.queue()

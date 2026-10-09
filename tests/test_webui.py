@@ -1,4 +1,5 @@
 import os
+import time
 import unittest
 from unittest import mock
 
@@ -19,6 +20,7 @@ class FakeAgent:
         yield from self.events
         if self.error:
             raise self.error
+        history.append({"type": "message", "role": "assistant"})
 
 
 def app(*events, error=None) -> webui.WikiBotApp:
@@ -38,6 +40,20 @@ def ask(wikibot, browser, text="Who was Ada Lovelace?"):
 
 def shown(browser) -> list[dict]:
     return webui.WikiBotApp._active(browser)["display"]
+
+
+def controls(frame):
+    """The parts of a frame a user can act on: input box, chat lists, buttons."""
+    return (frame[1], *frame[3:])
+
+
+def listed(frame) -> dict[str, list[str]]:
+    """Chat titles under each visible heading of the chat list."""
+    return {
+        group: [title for title, _ in chats.choices]
+        for group, chats in zip(webui.GROUPS, frame[3:6])
+        if chats.visible
+    }
 
 
 SEARCH = ("tool", "search_wikipedia", {"query": "Ada Lovelace", "limit": 5})
@@ -103,8 +119,8 @@ class Respond(unittest.TestCase):
     def test_controls_lock_while_streaming_and_unlock_after(self):
         frames = ask(app(("delta", "Hi"), ("done", "Hi")), empty())
         for frame in frames[:-1]:
-            self.assertEqual([c.interactive for c in (frame[1], *frame[3:])], [False] * 4)
-        self.assertEqual([c.interactive for c in (frames[-1][1], *frames[-1][3:])], [True] * 4)
+            self.assertEqual({c.interactive for c in controls(frame)}, {False})
+        self.assertEqual({c.interactive for c in controls(frames[-1])}, {True})
 
     def test_agent_history_is_kept_per_chat(self):
         wikibot, browser = app(("done", "ok")), empty()
@@ -112,27 +128,54 @@ class Respond(unittest.TestCase):
         wikibot.new_chat(browser)
         ask(wikibot, browser, "second")
         self.assertEqual(
-            [[h["content"] for h in chat["agent"]] for chat in browser["chats"]], [["second"], ["first"]]
+            [chat["agent"][0]["content"] for chat in browser["chats"]], ["second", "first"]
         )
 
 
 class Chats(unittest.TestCase):
     def test_first_load_starts_one_empty_chat(self):
         browser = empty()
-        display, _, _, chats, _, _ = app()._frame(browser)
-        self.assertEqual(display, [])
+        frame = app().load(browser)
+        self.assertEqual(frame[0], [])
         self.assertEqual(len(browser["chats"]), 1)
-        self.assertEqual(chats.choices, [("New chat", browser["active"])])
-        self.assertEqual(chats.value, browser["active"])
+        self.assertEqual(frame[3].choices, [("New chat", browser["active"])])
+        self.assertEqual(frame[3].value, browser["active"])
+        self.assertEqual(listed(frame), {"Today": ["New chat"]})
 
     def test_chats_are_listed_newest_first_under_their_first_question(self):
         wikibot, browser = app(("done", "ok")), empty()
         ask(wikibot, browser, "first question")
         ask(wikibot, browser, "a follow-up")
         wikibot.new_chat(browser)
-        chats = wikibot._frame(browser)[3]
-        self.assertEqual([title for title, _ in chats.choices], ["New chat", "first question"])
+        self.assertEqual(listed(wikibot._frame(browser)), {"Today": ["New chat", "first question"]})
         self.assertEqual(shown(browser), [])
+
+    def test_asking_in_an_older_chat_moves_it_to_the_top(self):
+        wikibot, browser = app(("done", "ok")), empty()
+        ask(wikibot, browser, "older")
+        older = browser["active"]
+        wikibot.new_chat(browser)
+        ask(wikibot, browser, "newer")
+        wikibot.switch_chat(older, browser)
+        frames = ask(wikibot, browser, "again")
+        self.assertEqual(listed(frames[-1]), {"Today": ["older", "newer"]})
+
+    def test_chats_are_grouped_by_the_day_they_were_last_used(self):
+        day = 86400
+        ages = {"just now": 0, "a day ago": day, "last week": 6 * day}
+        chats = [
+            {"id": title, "display": [{"role": "user", "content": title}], "agent": [], "updated": time.time() - age}
+            for title, age in ages.items()
+        ]
+        chats.append({"id": "old", "display": [{"role": "user", "content": "no timestamp"}], "agent": []})
+        browser = {"chats": chats, "active": "a day ago"}
+        frame = app()._frame(browser)
+        self.assertEqual(
+            listed(frame),
+            {"Today": ["just now"], "Yesterday": ["a day ago"], "Earlier": ["last week", "no timestamp"]},
+        )
+        # Only the list holding the open chat has a selection.
+        self.assertEqual([chats.value for chats in frame[3:6]], [None, "a day ago", None])
 
     def test_new_chat_reuses_an_empty_chat(self):
         wikibot, browser = app(), empty()
@@ -159,6 +202,62 @@ class Chats(unittest.TestCase):
         wikibot.delete_chat(browser)
         wikibot._frame(browser)
         self.assertEqual([(c["display"], c["agent"]) for c in browser["chats"]], [([], [])])
+
+
+class Load(unittest.TestCase):
+    def test_a_cut_off_answer_is_repaired(self):
+        call = {"type": "function_call", "call_id": "c2", "name": "search_wikipedia", "arguments": "{}"}
+        answered = {"type": "function_call", "call_id": "c1", "name": "search_wikipedia", "arguments": "{}"}
+        output = {"type": "function_call_output", "call_id": "c1", "output": "{}"}
+        user = {"role": "user", "content": "q"}
+        browser = {
+            "active": "a",
+            "chats": [
+                {
+                    "id": "a",
+                    "display": [
+                        {"role": "user", "content": "q"},
+                        {"role": "assistant", "content": "- step\n", "metadata": {"title": "Looking on Wikipedia…", "status": "pending"}},
+                    ],
+                    "agent": [user, answered, call, output],
+                }
+            ],
+        }
+        app().load(browser)
+        chat = browser["chats"][0]
+        self.assertEqual(chat["display"][1]["metadata"], {"title": "Lookup interrupted", "status": "done"})
+        # The call that never got an output would make the API reject the chat.
+        self.assertEqual(chat["agent"], [user, answered, output])
+
+
+class TryAgain(unittest.TestCase):
+    def test_last_turn_is_dropped_from_both_histories_and_asked_again(self):
+        wikibot, browser = app(("delta", "first answer"), ("done", "first answer")), empty()
+        ask(wikibot, browser, "one")
+        ask(wikibot, browser, "two")
+        wikibot.agent = FakeAgent(("delta", "better"), ("done", "better"))
+        frames = list(wikibot.retry(browser))
+        self.assertEqual(
+            [m["content"] for m in shown(browser)], ["one", "first answer", "two", "better"]
+        )
+        chat = webui.WikiBotApp._active(browser)
+        self.assertEqual(
+            [h.get("content", h.get("type")) for h in chat["agent"]], ["one", "message", "two", "message"]
+        )
+        self.assertEqual({c.interactive for c in controls(frames[-1])}, {True})
+
+    def test_retry_after_a_failed_turn_replaces_the_error(self):
+        wikibot, browser = app(error=RuntimeError("boom")), empty()
+        ask(wikibot, browser, "one")
+        wikibot.agent = FakeAgent(("done", "ok"))
+        list(wikibot.retry(browser))
+        self.assertEqual([m["content"] for m in shown(browser)], ["one", "ok"])
+        self.assertEqual(len(webui.WikiBotApp._active(browser)["agent"]), 2)
+
+    def test_nothing_to_retry_in_an_empty_chat(self):
+        browser = empty()
+        self.assertEqual(len(list(app().retry(browser))), 1)
+        self.assertEqual(shown(browser), [])
 
 
 class StepWording(unittest.TestCase):
