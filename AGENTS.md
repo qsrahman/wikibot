@@ -40,7 +40,7 @@ prints tool lines and deltas as they arrive and ignores `tool_result`.
 | `wikibot/wiki.py` | `WikipediaClient` — the only place that talks to `wikipediaapi` |
 | `wikibot/agent.py` | `Agent`, tool schemas, dispatch, `run_turn`, system prompt |
 | `wikibot/cli.py` | `Repl` |
-| `wikibot/webui.py` | `WikiBotApp` — Gradio app: display history + agent history in `gr.State` |
+| `wikibot/webui.py` | `WikiBotApp` — Gradio app: a list of chats (display + agent history each) in `gr.BrowserState` |
 | `wikibot/config.py` | `Config` — the only place `.env` is read |
 | `wikibot/__main__.py` | `python -m wikibot` entry |
 
@@ -64,8 +64,8 @@ connection, `Agent(client, model)` wraps the OpenAI client, `Repl` and
   `cli.py` catches, prints, keeps the session alive.
 - **`function_call` and its `function_call_output` are appended to history
   together**, in order. Splitting a pair makes the API reject the request.
-  History lives with the entrypoint: a mutable list in `Repl`, a
-  `BrowserState` dict in `WikiBotApp`; `run_turn` mutates it in place.
+  History lives with the entrypoint: a mutable list in `Repl`, one
+  per chat in the `BrowserState` dict of `WikiBotApp`; `run_turn` mutates it in place.
 - **The web UI never touches `wikipediaapi` and never builds URLs.** It talks
   only to `agent.py`'s event stream and renders what comes back; citations
   stay tool-output-only, same as the CLI. Errors become an error bubble, not
@@ -93,8 +93,9 @@ connection, `Agent(client, model)` wraps the OpenAI client, `Repl` and
   missing env var — that message is the contract, don't break it; test with
   `uv run --env-file /dev/null -m wikibot`).
 - Web UI: `uv run --env-file .env python -m wikibot.webui` → serves
-  http://localhost:7860; one turn must show tool-step bubbles then a streamed
-  cited answer; Clear must reset both histories.
+  http://localhost:7860; one turn must show a lookup-steps line then a streamed
+  cited answer; New chat must start with both histories empty, and Delete
+  this chat must remove both.
 - Engine check without a browser:
   `list(Agent(OpenAI(api_key=cfg.api_key, base_url=cfg.base_url), cfg.model).run_turn([], "msg"))`
   → event order `tool … → delta … → done`, every `function_call` paired with

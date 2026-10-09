@@ -40,13 +40,15 @@ uv run --env-file .env python -m wikibot.webui
 
 Opens a Gradio chat app on http://localhost:7860 with:
 
-- **telescope layout** — a dark instrument console: instrument bar, a Sessions
-  rail, and the composer in a single command-line row
+- **centered-column layout** — a chat list on the left and one reading column;
+  your question in a pill on the right, the answer as plain text
+- **several chats** — New chat starts one, the list switches between them,
+  Delete this chat removes the open one
 - **streaming answers** — live tokens; the input is locked while the agent works
-- **traced tool calls** — each dispatch shows as a log line: `⇢ search_wikipedia {...}`
-  resolving to `✔ 5 results: …`
+- **lookup steps** — each answer's tool calls fold into one line such as
+  "Searched Wikipedia and read 1 article"; click it for the details
 - citations as clickable links that open in a new tab
-- **persistent history** across reloads (localStorage); **Clear** wipes it all
+- **persistent chats** across reloads (localStorage)
 - copy buttons and friendly error bubbles
 
 Same backend as the CLI — `wikibot/agent.py` + `wikibot/wiki.py` are shared.
