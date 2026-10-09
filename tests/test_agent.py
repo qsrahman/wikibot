@@ -8,7 +8,7 @@ from openai.types.responses import (
     ResponseOutputText,
 )
 
-from wikibot.agent import Agent
+from wikibot.agent import TOOLS, Agent, _fix_citations
 
 
 def call(name: str, arguments, call_id: str = "c1") -> ResponseFunctionToolCall:
@@ -71,7 +71,12 @@ class FakeWiki:
     def page_summary(self, title):
         if title == "Boom":
             raise RuntimeError("wiki down")
-        return {"found": True, "title": title, "summary": "A mathematician.", "url": "u"}
+        return {
+            "found": True,
+            "title": title,
+            "summary": "A mathematician.",
+            "url": "https://en.wikipedia.org/wiki/" + title.replace(" ", "_"),
+        }
 
 
 def run(client, **agent_kwargs):
@@ -152,16 +157,60 @@ class RunTurn(unittest.TestCase):
                 self.assertEqual(events[-1], ("done", "Sorry."))
                 assert_calls_paired(self, history)
 
-    def test_round_limit_stops_with_a_message_and_paired_history(self):
-        client = FakeClient([SEARCH])  # the model never stops calling tools
+    def test_last_round_is_asked_to_answer_without_tools(self):
+        client = FakeClient([SEARCH], [SUMMARY], [message("From what I found: a mathematician.")])
+        events, history = run(client, max_tool_rounds=3)
+        self.assertEqual(events[-1], ("done", "From what I found: a mathematician."))
+        self.assertEqual([r["tools"] for r in client.requests], [TOOLS, TOOLS, []])
+        self.assertIn("out of lookups", client.requests[-1]["input"][-1]["content"])
+        # The notice is for that request only.
+        self.assertNotIn("out of lookups", json.dumps(history))
+        assert_calls_paired(self, history)
+
+    def test_tool_call_on_the_last_round_still_ends_cleanly(self):
+        client = FakeClient([SEARCH])  # a model that calls tools even when offered none
         events, history = run(client, max_tool_rounds=3)
         self.assertEqual(len(client.requests), 3)
         self.assertEqual(events[-1], ("done", "Stopped: tool call limit reached (3 rounds) for this message."))
         assert_calls_paired(self, history)
 
+    def test_blank_reply_is_asked_for_once_more(self):
+        client = FakeClient([message("")], [message("Second try.")])
+        events, history = run(client)
+        self.assertEqual(events[-1], ("done", "Second try."))
+        self.assertEqual(len(client.requests), 2)
+        self.assertEqual([h.get("type", h.get("role")) for h in history], ["user", "message"])
+
+    def test_two_blank_replies_are_reported_not_shown_as_nothing(self):
+        client = FakeClient([message("")])
+        events, history = run(client)
+        self.assertEqual(events, [("done", "The model returned an empty answer. Ask again.")])
+        self.assertEqual(len(client.requests), 2)
+        self.assertEqual(history, [{"role": "user", "content": "Who was Ada Lovelace?"}])
+
+    def test_done_text_has_odd_citations_rewritten_from_tool_urls(self):
+        events, _ = run(FakeClient([SUMMARY], [message("A mathematician【Ada Lovelace】.")]))
+        self.assertEqual(events[-1], ("done", "A mathematician [Ada Lovelace](https://en.wikipedia.org/wiki/Ada_Lovelace)."))
+
     def test_stream_that_never_completes_raises(self):
         with self.assertRaisesRegex(RuntimeError, "without completing"):
             run(FakeClient([message("partial")], complete=False))
+
+
+class Citations(unittest.TestCase):
+    URLS = {"Turing Award": "https://en.wikipedia.org/wiki/Turing_Award"}
+
+    def test_markers_become_links_only_for_titles_the_tools_returned(self):
+        cases = [
+            ("Perlis【Turing Award】.", "Perlis [Turing Award](https://en.wikipedia.org/wiki/Turing_Award)."),
+            ("Perlis 【Turing Award】", "Perlis [Turing Award](https://en.wikipedia.org/wiki/Turing_Award)"),
+            ("Perlis【Turing Award](https://x/y).", "Perlis [Turing Award](https://x/y)."),
+            ("See【Some Other Page】.", "See【Some Other Page】."),
+            ("Fine [Turing Award](u) already.", "Fine [Turing Award](u) already."),
+        ]
+        for text, expected in cases:
+            with self.subTest(text):
+                self.assertEqual(_fix_citations(text, self.URLS), expected)
 
 
 class Digest(unittest.TestCase):
@@ -176,6 +225,7 @@ class Digest(unittest.TestCase):
             ("get_page_summary", {"found": True, "summary": "x" * 1234}, "summary: 1,234 chars"),
             ("get_page_content", {"found": True, "text": "x" * 8000, "truncated": True}, "content: 8,000 chars, truncated"),
             ("get_page_section", {"found": True, "section": "S", "text": "xy", "truncated": False}, "content: 2 chars"),
+            ("get_page_summary", {"found": True, "summary": "x", "disambiguation": True}, "disambiguation page"),
             ("get_page_summary", {"found": False, "title": "T"}, "page not found"),
             ("get_page_section", {"found": False, "title": "T", "section": "S"}, "section not found"),
             ("get_page_summary", {"error": "e" * 150}, "error: " + "e" * 100),

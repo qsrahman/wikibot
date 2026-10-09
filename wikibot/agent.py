@@ -1,6 +1,7 @@
 """OpenAI Responses API agent loop with Wikipedia tools."""
 
 import json
+import re
 from collections.abc import Iterator
 
 from openai import OpenAI
@@ -49,6 +50,17 @@ you look things up instead of recalling them.
 - Only greetings and questions about yourself are answered without tools.
 """
 
+# Sent as a trailing user message with the final request of a turn, and not
+# kept in history. It has to be a user message: with only the tool list
+# removed or an instruction added, models keep emitting tool calls.
+_OUT_OF_LOOKUPS = {
+    "role": "user",
+    "content": (
+        "You are out of lookups for this message and cannot call tools now."
+        " Answer from the results above, and say plainly what you could not check."
+    ),
+}
+
 TOOLS = [
     {
         "type": "function",
@@ -77,7 +89,9 @@ TOOLS = [
         "name": "get_page_summary",
         "description": (
             "Fetch the introductory summary of a Wikipedia article by its "
-            "exact title, plus the article URL. Cheap; use for short answers."
+            "exact title, plus the article URL. Cheap; use for short answers. "
+            "If the title is a term with several meanings, the result has "
+            "disambiguation=true and its summary only lists those meanings."
         ),
         "strict": True,
         "parameters": {
@@ -199,6 +213,47 @@ _TOOL_CALLS: dict[str, tuple[str, tuple[str, ...]]] = {
 }
 
 
+# Some models cite as 【Title】 or 【Title](URL) instead of a markdown link.
+_ODD_CITATION = re.compile(r"【([^】\]\n]+)(】|\](?=\())")
+
+
+def _known_urls(history: list[dict]) -> dict[str, str]:
+    """Article title -> URL for everything the tools returned in this chat."""
+    urls: dict[str, str] = {}
+
+    def collect(node) -> None:
+        if isinstance(node, dict):
+            if isinstance(node.get("title"), str) and isinstance(node.get("url"), str):
+                urls[node["title"]] = node["url"]
+            for value in node.values():
+                collect(value)
+        elif isinstance(node, list):
+            for value in node:
+                collect(value)
+
+    for item in history:
+        if item.get("type") == "function_call_output":
+            try:
+                collect(json.loads(item["output"]))
+            except ValueError:
+                pass
+    return urls
+
+
+def _fix_citations(text: str, urls: dict[str, str]) -> str:
+    """Rewrite odd citation markers as [Title](URL), using tool URLs only."""
+
+    def link(match: re.Match) -> str:
+        title = match.group(1).strip()
+        # These markers are usually glued to the preceding word.
+        gap = " " if text[: match.start()][-1:].strip() else ""
+        if match.group(2) == "]":
+            return f"{gap}[{title}]"
+        return f"{gap}[{title}]({urls[title]})" if title in urls else match.group(0)
+
+    return _ODD_CITATION.sub(link, text)
+
+
 class Agent:
     """Runs the Responses API loop and dispatches Wikipedia tool calls.
 
@@ -253,6 +308,8 @@ class Agent:
             return f"error: {str(data['error'])[:100]}"
         if not data.get("found", True):
             return "section not found" if "section" in data else "page not found"
+        if data.get("disambiguation"):
+            return "disambiguation page"
         list_results = {
             "search_wikipedia": ("pages", "results", True),
             "get_page_links": ("links", "links", True),
@@ -280,26 +337,33 @@ class Agent:
 
         Events: ("tool", name, args) before each dispatch, ("tool_result",
         name, digest) after it, ("delta", text) for streamed answer tokens,
-        ("done", full_text) exactly once at the end. Raises on API errors;
-        tool failures are data, never raised.
+        ("done", full_text) exactly once at the end; full_text is the streamed
+        text with odd citation markers rewritten as links. Raises on API
+        errors; tool failures are data, never raised.
+
+        The model gets ``max_tool_rounds`` requests. Tools are switched off
+        for the last one, so a long lookup ends in an answer from what was
+        gathered instead of being cut off.
 
         History is mutated in place: user message, output items, and
         function_call/function_call_output pairs are appended together so the
         pairs are never split. Raise points occur only at API-call boundaries,
-        so a call can never be left without its output.
+        so an error can never leave a call without its output. A consumer that
+        abandons the generator between a "tool" event and its "tool_result"
+        does leave one, and must drop it (the CLI rolls the turn back, the web
+        UI repairs stored chats on load).
         """
         history.append({"role": "user", "content": user_message})
-        final_text = (
-            f"Stopped: tool call limit reached ({self.max_tool_rounds} rounds)"
-            " for this message."
-        )
-        for _ in range(self.max_tool_rounds):
+        final_text = ""
+        retried_empty = False
+        for round_no in range(self.max_tool_rounds):
+            last_round = round_no == self.max_tool_rounds - 1
             response = None
             with self.client.responses.create(
                 model=self.model,
                 instructions=SYSTEM_PROMPT,
-                input=history,
-                tools=TOOLS,
+                input=[*history, _OUT_OF_LOOKUPS] if last_round else history,
+                tools=[] if last_round else TOOLS,
                 stream=True,
                 store=False,
             ) as stream:
@@ -312,13 +376,19 @@ class Agent:
                 raise RuntimeError("response stream ended without completing")
 
             output_items = list(response.output)
-            history.extend(self._to_input_item(item) for item in output_items)
-
             calls = [item for item in output_items if item.type == "function_call"]
             if not calls:
                 final_text = response.output_text
+                if final_text.strip():
+                    history.extend(self._to_input_item(item) for item in output_items)
+                elif not retried_empty and not last_round:
+                    # A blank reply with no tool call is a transient model
+                    # hiccup; ask once more before reporting it.
+                    retried_empty = True
+                    continue
                 break
 
+            history.extend(self._to_input_item(item) for item in output_items)
             for call in calls:
                 # Must not raise here: the function_call is already in history and
                 # needs its output. Bad JSON becomes {} and _dispatch reports it.
@@ -336,4 +406,12 @@ class Agent:
                     }
                 )
                 yield ("tool_result", call.name, self._digest(call.name, output))
-        yield ("done", final_text)
+        else:
+            # Only reached if the model called a tool on the tool-less round.
+            final_text = (
+                f"Stopped: tool call limit reached ({self.max_tool_rounds} rounds)"
+                " for this message."
+            )
+        if not final_text.strip():
+            final_text = "The model returned an empty answer. Ask again."
+        yield ("done", _fix_citations(final_text, _known_urls(history)))
