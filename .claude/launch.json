@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "wikibot-webui",
+      "runtimeExecutable": "uv",
+      "runtimeArgs": ["run", "--env-file", ".env", "python", "-m", "wikibot.webui"],
+      "port": 7860
+    }
+  ]
+}
