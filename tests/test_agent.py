@@ -97,6 +97,12 @@ SUMMARY = call("get_page_summary", {"title": "Ada Lovelace"}, "c2")
 
 
 class RunTurn(unittest.TestCase):
+    def test_tool_round_limit_must_be_positive(self):
+        client = FakeClient([message("unused")])
+        with self.assertRaisesRegex(ValueError, "max_tool_rounds must be at least 1"):
+            run(client, max_tool_rounds=0)
+        self.assertEqual(client.requests, [])
+
     def test_events_run_tool_then_delta_then_done(self):
         events, _ = run(FakeClient([SEARCH], [SUMMARY], [message("She was a mathematician.")]))
         self.assertEqual(

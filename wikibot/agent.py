@@ -3,8 +3,10 @@
 import json
 import re
 from collections.abc import Iterator
+from typing import cast
 
 from openai import OpenAI
+from openai.types.responses import ResponseInputParam, ToolParam
 
 from .wiki import WikipediaClient
 
@@ -61,7 +63,7 @@ _OUT_OF_LOOKUPS = {
     ),
 }
 
-TOOLS = [
+TOOLS: list[ToolParam] = [
     {
         "type": "function",
         "name": "search_wikipedia",
@@ -270,6 +272,8 @@ class Agent:
         *,
         max_tool_rounds: int = MAX_TOOL_ROUNDS,
     ):
+        if max_tool_rounds < 1:
+            raise ValueError("max_tool_rounds must be at least 1")
         self.client = client
         self.model = model
         self.wiki = wiki if wiki is not None else WikipediaClient()
@@ -362,7 +366,10 @@ class Agent:
             with self.client.responses.create(
                 model=self.model,
                 instructions=SYSTEM_PROMPT,
-                input=[*history, _OUT_OF_LOOKUPS] if last_round else history,
+                input=cast(
+                    ResponseInputParam,
+                    [*history, _OUT_OF_LOOKUPS] if last_round else history,
+                ),
                 tools=[] if last_round else TOOLS,
                 stream=True,
                 store=False,
@@ -377,18 +384,19 @@ class Agent:
 
             output_items = list(response.output)
             calls = [item for item in output_items if item.type == "function_call"]
+            answer_text = response.output_text
+            if calls or answer_text.strip():
+                history.extend(self._to_input_item(item) for item in output_items)
+
             if not calls:
-                final_text = response.output_text
-                if final_text.strip():
-                    history.extend(self._to_input_item(item) for item in output_items)
-                elif not retried_empty and not last_round:
+                final_text = answer_text
+                if not answer_text.strip() and not retried_empty and not last_round:
                     # A blank reply with no tool call is a transient model
                     # hiccup; ask once more before reporting it.
                     retried_empty = True
                     continue
                 break
 
-            history.extend(self._to_input_item(item) for item in output_items)
             for call in calls:
                 # Must not raise here: the function_call is already in history and
                 # needs its output. Bad JSON becomes {} and _dispatch reports it.
