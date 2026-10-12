@@ -1,7 +1,7 @@
 # wikibot
 
-CLI chatbot that answers questions from English Wikipedia, using the OpenAI
-Responses API with Wikipedia search/read tools.
+A Wikipedia chatbot with two frontends — a REPL and a Gradio web app — over
+the same OpenAI Responses API agent with Wikipedia search/read tools.
 
 ## Setup
 
@@ -24,12 +24,22 @@ Requires [uv](https://docs.astral.sh/uv/).
 ## REPL
 
 ```
-you> Who was Alan Turing?
+$ uv run --env-file .env -m wikibot
+wikibot — answers from English Wikipedia.
+commands: exit | quit | .reset (clear history)
+> Who was Alan Turing?
   -> search_wikipedia({"query": "Alan Turing", "limit": 5})
   -> get_page_summary({"title": "Alan Turing"})
-bot> Alan Turing was an English mathematician ... [Alan Turing](https://en.wikipedia.org/wiki/Alan_Turing)
+
+Alan Mathison Turing (23 June 1912 – 7 June 1954) was an English
+mathematician, logician and cryptanalyst, widely regarded as the
+father of theoretical computer science.
+
+Source: [Alan Turing](https://en.wikipedia.org/wiki/Alan_Turing)
+> 
 ```
 
+Tool calls print as they happen; the answer is then streamed in live.
 Commands: `exit` / `quit` to leave, `.reset` to clear conversation history.
 
 ## Web UI
@@ -61,7 +71,7 @@ Same backend as the CLI — `wikibot/agent.py` + `wikibot/wiki.py` are shared.
 
 | File | Purpose |
 |------|---------|
-| `wikibot/wiki.py` | Wikipedia adapter (search, summary, content) over `wikipediaapi` |
+| `wikibot/wiki.py` | Wikipedia adapter over `wikipediaapi` (search, summary, content, sections, links, random pages) |
 | `wikibot/agent.py` | Tool schemas + Responses API agent loop (`run_turn` events) |
 | `wikibot/cli.py` | REPL |
 | `wikibot/webui.py` | Gradio web UI |

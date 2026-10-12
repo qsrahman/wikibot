@@ -37,8 +37,8 @@ prints tool lines and deltas as they arrive and ignores `tool_result`.
 
 | File | Purpose |
 |------|---------|
-| `wikibot/wiki.py` | `WikipediaClient` — the only place that talks to Wikipedia: `wikipediaapi`, plus one direct `httpx` query for summaries |
-| `wikibot/agent.py` | `Agent`, tool schemas, dispatch, `run_turn`, system prompt |
+| `wikibot/wiki.py` | `WikipediaClient` — the only place that talks to Wikipedia: `wikipediaapi`, plus a direct `httpx` query (`_intro`) for summaries and disambiguation |
+| `wikibot/agent.py` | `Agent`, tool schemas, `_TOOL_CALLS` dispatch, `run_turn`, system prompt |
 | `wikibot/cli.py` | `Repl` |
 | `wikibot/webui.py` | `WikiBotApp` — Gradio app: a list of chats (display + agent history each) in `gr.BrowserState` |
 | `wikibot/config.py` | `Config` — the only place `.env` is read |
