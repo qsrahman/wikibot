@@ -362,8 +362,7 @@ class Agent:
         retried_empty = False
         for round_no in range(self.max_tool_rounds):
             last_round = round_no == self.max_tool_rounds - 1
-            response = None
-            with self.client.responses.create(
+            with self.client.responses.stream(
                 model=self.model,
                 instructions=SYSTEM_PROMPT,
                 input=cast(
@@ -371,20 +370,26 @@ class Agent:
                     [*history, _OUT_OF_LOOKUPS] if last_round else history,
                 ),
                 tools=[] if last_round else TOOLS,
-                stream=True,
                 store=False,
             ) as stream:
                 for event in stream:
                     if event.type == "response.output_text.delta":
                         yield ("delta", event.delta)
-                    elif event.type == "response.completed":
-                        response = event.response
-            if response is None:
-                raise RuntimeError("response stream ended without completing")
+                    elif event.type == "response.failed":
+                        error = event.response.error
+                        message = error.message if error else "unknown error"
+                        raise RuntimeError(f"Response failed: {message}")
+                    elif event.type == "response.incomplete":
+                        details = event.response.incomplete_details
+                        reason = details.reason if details else "unknown reason"
+                        raise RuntimeError(f"Response incomplete: {reason}")
+                response = stream.get_final_response()
 
             output_items = list(response.output)
             calls = [item for item in output_items if item.type == "function_call"]
             answer_text = response.output_text
+            if calls and last_round:
+                continue
             if calls or answer_text.strip():
                 history.extend(self._to_input_item(item) for item in output_items)
 
