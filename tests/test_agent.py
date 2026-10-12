@@ -138,8 +138,8 @@ SUMMARY = call("get_page_summary", {"title": "Ada Lovelace"}, "c2")
 class RunTurn(unittest.TestCase):
     def test_tool_round_limit_must_be_positive(self):
         client = FakeClient([message("unused")])
-        with self.assertRaisesRegex(ValueError, "max_tool_rounds must be at least 1"):
-            run(client, max_tool_rounds=0)
+        with self.assertRaisesRegex(ValueError, "max_turns must be at least 1"):
+            run(client, max_turns=0)
         self.assertEqual(client.requests, [])
 
     def test_events_run_tool_then_delta_then_done(self):
@@ -228,7 +228,7 @@ class RunTurn(unittest.TestCase):
         client = FakeClient(
             [SEARCH], [SUMMARY], [message("From what I found: a mathematician.")]
         )
-        events, history = run(client, max_tool_rounds=3)
+        events, history = run(client, max_turns=3)
         self.assertEqual(events[-1], ("done", "From what I found: a mathematician."))
         self.assertEqual([r["tools"] for r in client.requests], [TOOLS, TOOLS, []])
         self.assertIn("out of lookups", client.requests[-1]["input"][-1]["content"])
@@ -238,7 +238,7 @@ class RunTurn(unittest.TestCase):
 
     def test_tool_call_on_the_last_round_still_ends_cleanly(self):
         client = FakeClient([SEARCH])  # a model that calls tools even when offered none
-        events, history = run(client, max_tool_rounds=3)
+        events, history = run(client, max_turns=3)
         self.assertEqual(len(client.requests), 3)
         self.assertEqual([event[0] for event in events].count("tool"), 2)
         self.assertEqual(

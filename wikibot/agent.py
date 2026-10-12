@@ -10,7 +10,7 @@ from openai.types.responses import ResponseInputParam, ToolParam
 
 from .wiki import WikipediaClient
 
-MAX_TOOL_ROUNDS = 15
+MAX_TURNS = 15
 
 SYSTEM_PROMPT = """\
 You are wikibot, an assistant that answers questions from English Wikipedia.
@@ -270,14 +270,14 @@ class Agent:
         model: str,
         wiki: WikipediaClient | None = None,
         *,
-        max_tool_rounds: int = MAX_TOOL_ROUNDS,
+        max_turns: int = MAX_TURNS,
     ):
-        if max_tool_rounds < 1:
-            raise ValueError("max_tool_rounds must be at least 1")
+        if max_turns < 1:
+            raise ValueError("max_turns must be at least 1")
         self.client = client
         self.model = model
         self.wiki = wiki if wiki is not None else WikipediaClient()
-        self.max_tool_rounds = max_tool_rounds
+        self.max_turns = max_turns
 
     def _dispatch(self, name: str, arguments: dict) -> str:
         """Call the wiki method a tool maps to; failures become data."""
@@ -345,7 +345,7 @@ class Agent:
         text with odd citation markers rewritten as links. Raises on API
         errors; tool failures are data, never raised.
 
-        The model gets ``max_tool_rounds`` requests. Tools are switched off
+        The model gets ``max_turns`` requests. Tools are switched off
         for the last one, so a long lookup ends in an answer from what was
         gathered instead of being cut off.
 
@@ -360,8 +360,8 @@ class Agent:
         history.append({"role": "user", "content": user_message})
         final_text = ""
         retried_empty = False
-        for round_no in range(self.max_tool_rounds):
-            last_round = round_no == self.max_tool_rounds - 1
+        for turn in range(self.max_turns):
+            last_round = turn == self.max_turns - 1
             with self.client.responses.stream(
                 model=self.model,
                 instructions=SYSTEM_PROMPT,
@@ -422,7 +422,7 @@ class Agent:
         else:
             # Only reached if the model called a tool on the tool-less round.
             final_text = (
-                f"Stopped: tool call limit reached ({self.max_tool_rounds} rounds)"
+                f"Stopped: tool call limit reached ({self.max_turns} rounds)"
                 " for this message."
             )
         if not final_text.strip():

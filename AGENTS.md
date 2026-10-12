@@ -35,15 +35,15 @@ prints tool lines and deltas as they arrive and ignores `tool_result`.
 
 ## Key files
 
-| File | Purpose |
-|------|---------|
-| `wikibot/wiki.py` | `WikipediaClient` — the only place that talks to Wikipedia: `wikipediaapi`, plus a direct `httpx` query (`_intro`) for summaries and disambiguation |
-| `wikibot/agent.py` | `Agent`, tool schemas, `_TOOL_CALLS` dispatch, `run_turn`, system prompt |
-| `wikibot/cli.py` | `Repl` |
-| `wikibot/webui.py` | `WikiBotApp` — Gradio app: a list of chats (display + agent history each) in `gr.BrowserState` |
-| `wikibot/config.py` | `Config` — the only place `.env` is read |
-| `wikibot/__main__.py` | `python -m wikibot` entry |
-| `tests/` | Offline `unittest` suite: no network, no API key |
+| File                  | Purpose                                                                                                                                             |
+| --------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `wikibot/wiki.py`     | `WikipediaClient` — the only place that talks to Wikipedia: `wikipediaapi`, plus a direct `httpx` query (`_intro`) for summaries and disambiguation |
+| `wikibot/agent.py`    | `Agent`, tool schemas, `_TOOL_CALLS` dispatch, `run_turn`, system prompt                                                                            |
+| `wikibot/cli.py`      | `Repl`                                                                                                                                              |
+| `wikibot/webui.py`    | `WikiBotApp` — Gradio app: a list of chats (display + agent history each) in `gr.BrowserState`                                                      |
+| `wikibot/config.py`   | `Config` — the only place `.env` is read                                                                                                            |
+| `wikibot/__main__.py` | `python -m wikibot` entry                                                                                                                           |
+| `tests/`              | Offline `unittest` suite: no network, no API key                                                                                                    |
 
 Classes hold a session's moving parts: `WikipediaClient` wraps the wikipedia
 connection, `Agent(client, model)` wraps the OpenAI client, `Repl` and
@@ -67,7 +67,7 @@ connection, `Agent(client, model)` wraps the OpenAI client, `Repl` and
   exceptions and returns `{"error": ...}` as the tool output so the model can
   recover and the REPL turn never crashes. Same rule at the REPL boundary:
   `cli.py` catches, prints, keeps the session alive.
-- **A turn always ends in an answer.** The last of `max_tool_rounds` requests
+- **A turn always ends in an answer.** The last of `max_turns` requests
   is sent without tools and with an "out of lookups" user message that is not
   kept in history, so the model answers from what it gathered. A blank reply
   is retried once, then reported. `done` text has odd citation markers
