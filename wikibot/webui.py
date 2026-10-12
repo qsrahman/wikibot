@@ -25,7 +25,7 @@ from .config import Config
 
 config = Config.from_env()
 
-_THEME = gr.themes.Soft()
+_THEME = gr.themes.Soft(font=["system-ui", "sans-serif"])
 
 # Layout only: every colour is a theme variable, so light and dark both follow
 # the theme.
